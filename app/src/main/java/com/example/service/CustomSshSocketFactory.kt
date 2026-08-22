@@ -128,7 +128,7 @@ class CustomSshSocketFactory(
             return object : OutputStream() {
                 override fun write(b: Int) {
                     val arr = byteArrayOf(b.toByte())
-                    webSocket.send(arr.toByteString(0, 1))
+                    webSocket.send(ByteString.of(arr))
                 }
 
                 override fun write(b: ByteArray, off: Int, len: Int) {
