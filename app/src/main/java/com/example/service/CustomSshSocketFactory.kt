@@ -9,7 +9,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import okhttp3.WebSocket
 import okio.ByteString
-import okio.ByteString.Companion.toByteString
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PipedInputStream
@@ -132,7 +131,7 @@ class CustomSshSocketFactory(
 
                 override fun write(b: ByteArray, off: Int, len: Int) {
                     if (len > 0) {
-                        webSocket.send(b.toByteString(off, len))
+                        webSocket.send(ByteString.of(b, off, len))
                     }
                 }
             }
