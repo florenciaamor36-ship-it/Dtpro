@@ -74,6 +74,21 @@ class TunnelEngine private constructor() {
 
         scope.launch {
             try {
+                // Validación básica de campos indispensables
+                val targetHost = config.serverHost.trim()
+                if (targetHost.isBlank() && config.proxyHost.isBlank()) {
+                    val err = "Error de configuración: Debes ingresar el Host del servidor SSH o el Host frontal."
+                    log("⛔ $err", LogLevel.ERROR)
+                    _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Error(err))
+                    return@launch
+                }
+                if (config.username.trim().isBlank()) {
+                    val err = "Error de configuración: Debes ingresar el Usuario SSH."
+                    log("⛔ $err", LogLevel.ERROR)
+                    _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Error(err))
+                    return@launch
+                }
+
                 // 1. Verificación de Expiración (Fecha y Hora)
                 val expiryCheck = com.example.util.HwidManager.checkExpiry(config)
                 if (!expiryCheck.first) {
@@ -119,9 +134,35 @@ class TunnelEngine private constructor() {
                     startSshDirectOrSslOrPayload(config)
                 }
             } catch (e: Exception) {
-                log("Error fatal en túnel: ${e.message ?: "Desconocido"}", LogLevel.ERROR)
-                handleConnectionFailure(config, e.message ?: "Error desconocido")
+                val readableError = getReadableErrorMessage(e)
+                log("⛔ $readableError", LogLevel.ERROR)
+                handleConnectionFailure(config, readableError)
             }
+        }
+    }
+
+    private fun getReadableErrorMessage(e: Throwable): String {
+        val msg = e.message ?: ""
+        return when {
+            e is java.net.UnknownHostException || msg.contains("Unable to resolve host", ignoreCase = true) -> {
+                "Error DNS: No se pudo resolver el host '${msg.substringAfter("host ").substringBefore(":")}'. Revisa tu conexión de red o dominio."
+            }
+            e is java.net.ConnectException || msg.contains("Connection refused", ignoreCase = true) -> {
+                "Error de conexión: Conexión rechazada. Verifica que el host frontal/servidor y el puerto estén activos."
+            }
+            e is java.net.SocketTimeoutException || msg.contains("timeout", ignoreCase = true) -> {
+                "Tiempo de espera agotado: El servidor o proxy no respondió a tiempo."
+            }
+            msg.contains("Auth fail", ignoreCase = true) -> {
+                "Error de autenticación SSH: Usuario o contraseña incorrectos."
+            }
+            msg.contains("SSH_MSG_DISCONNECT", ignoreCase = true) -> {
+                "El servidor SSH cerró la conexión."
+            }
+            msg.contains("Host frontal", ignoreCase = true) || msg.contains("Usuario SSH", ignoreCase = true) -> {
+                msg
+            }
+            else -> "Error en conexión: ${msg.ifBlank { e.javaClass.simpleName }}"
         }
     }
 

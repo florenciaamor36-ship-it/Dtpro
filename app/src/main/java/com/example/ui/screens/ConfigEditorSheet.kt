@@ -1,20 +1,26 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -39,7 +45,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +55,7 @@ import com.example.data.model.TunnelConfig
 import com.example.data.model.TunnelMode
 import com.example.ui.theme.CyberBorder
 import com.example.ui.theme.CyberCard
+import com.example.ui.theme.CyberCardLight
 import com.example.ui.theme.CyberNavy
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonGreen
@@ -54,7 +63,7 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ConfigEditorSheet(
     config: TunnelConfig?,
@@ -63,9 +72,10 @@ fun ConfigEditorSheet(
     onOpenPayloadGenerator: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val clipboardManager = LocalClipboardManager.current
 
     var name by remember(config) { mutableStateOf(config?.name ?: "Nuevo Servidor") }
-    var mode by remember(config) { mutableStateOf(config?.mode ?: TunnelMode.SSH_WEBSOCKET_SSL) }
+    var mode by remember(config) { mutableStateOf(config?.mode ?: TunnelMode.SSH_PAYLOAD) }
     var host by remember(config) { mutableStateOf(config?.serverHost ?: "") }
     var portText by remember(config) { mutableStateOf(config?.serverPort?.toString() ?: mode.defaultPort.toString()) }
     var username by remember(config) { mutableStateOf(config?.username ?: "") }
@@ -73,7 +83,7 @@ fun ConfigEditorSheet(
     var sniHost by remember(config) { mutableStateOf(config?.sniHost ?: "") }
     var payload by remember(config) { mutableStateOf(config?.customPayload ?: "") }
     var proxyHost by remember(config) { mutableStateOf(config?.proxyHost ?: "") }
-    var proxyPortText by remember(config) { mutableStateOf(config?.proxyPort?.toString() ?: "8080") }
+    var proxyPortText by remember(config) { mutableStateOf(config?.proxyPort?.toString() ?: "80") }
     var autoReconnect by remember(config) { mutableStateOf(config?.autoReconnect ?: true) }
     var udpForwarding by remember(config) { mutableStateOf(config?.isUdpForwarding ?: true) }
 
@@ -97,7 +107,7 @@ fun ConfigEditorSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (config?.id != null && config.id > 0) "EDITAR SERVIDOR / CONFIG" else "NUEVA CONFIGURACIÓN",
+                    text = if (config?.id != null && config.id > 0) "EDITAR PERFIL / SERVIDOR" else "NUEVA CONFIGURACIÓN",
                     color = NeonCyan,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
@@ -128,7 +138,7 @@ fun ConfigEditorSheet(
                     value = mode.title,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Tipo de Túnel / Protocolo", color = TextSecondary) },
+                    label = { Text("Modo de Conexión / Protocolo", color = TextSecondary) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isModeDropdownExpanded) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = TextPrimary,
@@ -168,30 +178,191 @@ fun ConfigEditorSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Server Host & Port
-            Row(modifier = Modifier.fillMaxWidth()) {
-                DarkTextField(
-                    value = host,
-                    onValueChange = { host = it },
-                    label = "Host / IP del Servidor",
-                    modifier = Modifier.weight(2.5f),
-                    testTag = "config_host_input"
+            // Campos específicos para el modo SSH + HTTP Payload (Puerto 80)
+            if (mode == TunnelMode.SSH_PAYLOAD) {
+                // Host Frontal o Proxy
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    DarkTextField(
+                        value = proxyHost,
+                        onValueChange = { proxyHost = it },
+                        label = "Host frontal o Proxy",
+                        modifier = Modifier.weight(2.5f),
+                        testTag = "config_proxy_host_input"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    DarkTextField(
+                        value = proxyPortText,
+                        onValueChange = { proxyPortText = it },
+                        label = "Puerto frontal",
+                        modifier = Modifier.weight(1f),
+                        testTag = "config_proxy_port_input"
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Campo Multilínea de Payload Completo
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Payload completo",
+                        color = NeonCyan,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            val clipText = clipboardManager.getText()?.text
+                            if (!clipText.isNullOrBlank()) {
+                                payload = clipText
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(30.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan)
+                    ) {
+                        Icon(imageVector = Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("PEGAR", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                OutlinedTextField(
+                    value = payload,
+                    onValueChange = { payload = it },
+                    placeholder = {
+                        Text(
+                            text = "GET / HTTP/1.1[crlf]\nHost: [host][crlf]\nConnection: Keep-Alive[crlf]\n[crlf]",
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .testTag("config_payload_input"),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        color = TextPrimary
+                    ),
+                    maxLines = 10,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = NeonCyan,
+                        unfocusedBorderColor = CyberBorder,
+                        focusedContainerColor = CyberCard,
+                        unfocusedContainerColor = CyberCard
+                    )
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                DarkTextField(
-                    value = portText,
-                    onValueChange = { portText = it },
-                    label = "Puerto",
-                    modifier = Modifier.weight(1f),
-                    testTag = "config_port_input"
-                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Marcadores rápidos
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    listOf("[crlf]", "[host]", "[port]", "[host_port]").forEach { tag ->
+                        Box(
+                            modifier = Modifier
+                                .background(CyberCardLight, RoundedCornerShape(6.dp))
+                                .border(1.dp, CyberBorder, RoundedCornerShape(6.dp))
+                                .clickable { payload += tag }
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = tag,
+                                color = NeonGreen,
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Host real del servidor SSH (si es diferente del frontal)
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    DarkTextField(
+                        value = host,
+                        onValueChange = { host = it },
+                        label = "Host real del servidor SSH (opcional)",
+                        modifier = Modifier.weight(2.5f),
+                        testTag = "config_host_input"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    DarkTextField(
+                        value = portText,
+                        onValueChange = { portText = it },
+                        label = "Puerto SSH",
+                        modifier = Modifier.weight(1f),
+                        testTag = "config_port_input"
+                    )
+                }
+            } else {
+                // Modos Directo, SSL o WebSocket
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    DarkTextField(
+                        value = host,
+                        onValueChange = { host = it },
+                        label = "Host / IP del Servidor",
+                        modifier = Modifier.weight(2.5f),
+                        testTag = "config_host_input"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    DarkTextField(
+                        value = portText,
+                        onValueChange = { portText = it },
+                        label = "Puerto",
+                        modifier = Modifier.weight(1f),
+                        testTag = "config_port_input"
+                    )
+                }
+
+                if (mode.requiresSni || mode == TunnelMode.SSH_SSL || mode == TunnelMode.SSH_WEBSOCKET_SSL) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    DarkTextField(
+                        value = sniHost,
+                        onValueChange = { sniHost = it },
+                        label = "SNI / Host SSL (ej: midominio.com)",
+                        testTag = "config_sni_input"
+                    )
+                }
+
+                if (mode.requiresPayload || mode == TunnelMode.SSH_WEBSOCKET || mode == TunnelMode.SSH_WEBSOCKET_SSL) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Payload completo",
+                        color = NeonCyan,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    DarkTextField(
+                        value = payload,
+                        onValueChange = { payload = it },
+                        label = "Payload HTTP",
+                        minLines = 3,
+                        testTag = "config_payload_input"
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // SSH Credentials
+            // Credenciales SSH
             Row(modifier = Modifier.fillMaxWidth()) {
                 DarkTextField(
                     value = username,
@@ -210,62 +381,6 @@ fun ConfigEditorSheet(
                 )
             }
 
-            if (mode.requiresSni || mode == TunnelMode.SSH_SSL || mode == TunnelMode.SSH_WEBSOCKET_SSL) {
-                Spacer(modifier = Modifier.height(12.dp))
-                DarkTextField(
-                    value = sniHost,
-                    onValueChange = { sniHost = it },
-                    label = "SNI / Host SSL / Bug Host (ej: cloudflare.com)",
-                    testTag = "config_sni_input"
-                )
-            }
-
-            if (mode.requiresPayload || mode == TunnelMode.SSH_PAYLOAD || mode == TunnelMode.SSH_WEBSOCKET || mode == TunnelMode.SSH_WEBSOCKET_SSL) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "Custom HTTP Payload", color = TextSecondary, fontSize = 12.sp)
-                    OutlinedButton(
-                        onClick = onOpenPayloadGenerator,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Build, contentDescription = null, tint = NeonCyan, modifier = Modifier.padding(end = 4.dp))
-                        Text("Generador", color = NeonCyan, fontSize = 11.sp)
-                    }
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                DarkTextField(
-                    value = payload,
-                    onValueChange = { payload = it },
-                    label = "Payload HTTP",
-                    minLines = 3,
-                    testTag = "config_payload_input"
-                )
-            }
-
-            if (mode == TunnelMode.SSH_PAYLOAD || mode == TunnelMode.DIRECT_PROXY) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    DarkTextField(
-                        value = proxyHost,
-                        onValueChange = { proxyHost = it },
-                        label = "Proxy IP / Host Remoto",
-                        modifier = Modifier.weight(2.5f)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    DarkTextField(
-                        value = proxyPortText,
-                        onValueChange = { proxyPortText = it },
-                        label = "Puerto Proxy",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
             Spacer(modifier = Modifier.height(14.dp))
 
             // Toggles
@@ -276,7 +391,7 @@ fun ConfigEditorSheet(
             ) {
                 Column {
                     Text(text = "Reconexión Automática", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                    Text(text = "Reintentar si se pierde la conexión", color = TextMuted, fontSize = 11.sp)
+                    Text(text = "Reintentar conexión si se pierde la red", color = TextMuted, fontSize = 11.sp)
                 }
                 Switch(
                     checked = autoReconnect,
@@ -309,7 +424,7 @@ fun ConfigEditorSheet(
             Button(
                 onClick = {
                     val port = portText.toIntOrNull() ?: mode.defaultPort
-                    val pPort = proxyPortText.toIntOrNull() ?: 8080
+                    val pPort = proxyPortText.toIntOrNull() ?: 80
                     val updated = (config ?: TunnelConfig(name = name)).copy(
                         name = name.ifBlank { "Servidor DTunnel" },
                         mode = mode,

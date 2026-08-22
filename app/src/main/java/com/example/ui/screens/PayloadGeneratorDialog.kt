@@ -1,28 +1,33 @@
 package com.example.ui.screens
 
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -36,45 +41,48 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.CyberBorder
 import com.example.ui.theme.CyberCard
+import com.example.ui.theme.CyberCardLight
 import com.example.ui.theme.CyberNavy
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonGreen
+import com.example.ui.theme.NeonRed
+import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import com.example.util.PayloadGenerator
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PayloadGeneratorDialog(
+    initialPayload: String = "",
     onPayloadGenerated: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val methods = listOf("CONNECT", "GET", "POST", "HEAD", "PUT", "OPTIONS")
-    val injectionTypes = listOf("Normal", "Front Inject", "Back Inject")
-
-    var selectedMethod by remember { mutableStateOf("CONNECT") }
-    var selectedInjection by remember { mutableStateOf("Normal") }
-    var customHost by remember { mutableStateOf("") }
-    var useKeepAlive by remember { mutableStateOf(true) }
-    var useUpgrade by remember { mutableStateOf(true) }
-    var useOnlineHost by remember { mutableStateOf(true) }
-
-    var isMethodExpanded by remember { mutableStateOf(false) }
-    var isInjectionExpanded by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+    var payloadText by remember { mutableStateOf(initialPayload) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = CyberNavy,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = NeonCyan)
+                Icon(imageVector = Icons.Default.Code, contentDescription = null, tint = NeonCyan)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("GENERADOR DE PAYLOAD HTTP", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "EDITAR PAYLOAD",
+                    color = TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                )
             }
         },
         text = {
@@ -83,141 +91,129 @@ fun PayloadGeneratorDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Method Dropdown
-                ExposedDropdownMenuBox(
-                    expanded = isMethodExpanded,
-                    onExpandedChange = { isMethodExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = selectedMethod,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Método de Petición", color = TextSecondary) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isMethodExpanded) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = NeonCyan,
-                            unfocusedBorderColor = CyberBorder,
-                            focusedContainerColor = CyberCard,
-                            unfocusedContainerColor = CyberCard
-                        ),
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = isMethodExpanded,
-                        onDismissRequest = { isMethodExpanded = false },
-                        modifier = Modifier.background(CyberCard)
-                    ) {
-                        methods.forEach { m ->
-                            DropdownMenuItem(
-                                text = { Text(m, color = TextPrimary) },
-                                onClick = {
-                                    selectedMethod = m
-                                    isMethodExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Injection Type
-                ExposedDropdownMenuBox(
-                    expanded = isInjectionExpanded,
-                    onExpandedChange = { isInjectionExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = selectedInjection,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Modo de Inyección", color = TextSecondary) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isInjectionExpanded) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = NeonCyan,
-                            unfocusedBorderColor = CyberBorder,
-                            focusedContainerColor = CyberCard,
-                            unfocusedContainerColor = CyberCard
-                        ),
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = isInjectionExpanded,
-                        onDismissRequest = { isInjectionExpanded = false },
-                        modifier = Modifier.background(CyberCard)
-                    ) {
-                        injectionTypes.forEach { inj ->
-                            DropdownMenuItem(
-                                text = { Text(inj, color = TextPrimary) },
-                                onClick = {
-                                    selectedInjection = inj
-                                    isInjectionExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                DarkTextField(
-                    value = customHost,
-                    onValueChange = { customHost = it },
-                    label = "Host Bug / URL (opcional, ej: m.facebook.com)"
+                Text(
+                    text = "Ingresa o pega el payload HTTP completo. Se preservará exactamente como lo escribas.",
+                    color = TextSecondary,
+                    fontSize = 12.sp
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Checkboxes
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = useKeepAlive,
-                        onCheckedChange = { useKeepAlive = it },
-                        colors = CheckboxDefaults.colors(checkedColor = NeonCyan)
+                // Campo Multilínea Principal
+                OutlinedTextField(
+                    value = payloadText,
+                    onValueChange = { payloadText = it },
+                    label = { Text("Payload completo", color = NeonCyan, fontWeight = FontWeight.SemiBold) },
+                    placeholder = {
+                        Text(
+                            text = "GET / HTTP/1.1[crlf]\nHost: [host][crlf]\nConnection: Keep-Alive[crlf]\n[crlf]",
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .testTag("payload_full_textfield"),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        color = TextPrimary
+                    ),
+                    maxLines = 12,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = NeonCyan,
+                        unfocusedBorderColor = CyberBorder,
+                        focusedContainerColor = CyberCard,
+                        unfocusedContainerColor = CyberCard
                     )
-                    Text("Connection: Keep-Alive", color = TextPrimary, fontSize = 13.sp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Barra de Acciones Rápidas (Pegar / Limpiar)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val clipText = clipboardManager.getText()?.text
+                            if (!clipText.isNullOrBlank()) {
+                                payloadText = clipText
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan)
+                    ) {
+                        Icon(imageVector = Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("PEGAR", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = { payloadText = "" },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonRed)
+                    ) {
+                        Icon(imageVector = Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("LIMPIAR", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = useUpgrade,
-                        onCheckedChange = { useUpgrade = it },
-                        colors = CheckboxDefaults.colors(checkedColor = NeonCyan)
-                    )
-                    Text("Upgrade: websocket", color = TextPrimary, fontSize = 13.sp)
-                }
+                Spacer(modifier = Modifier.height(10.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = useOnlineHost,
-                        onCheckedChange = { useOnlineHost = it },
-                        colors = CheckboxDefaults.colors(checkedColor = NeonCyan)
-                    )
-                    Text("X-Online-Host / Forward-Host", color = TextPrimary, fontSize = 13.sp)
+                // Chips para insertar marcadores
+                Text(
+                    text = "Marcadores automáticos compatibles:",
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("[crlf]", "[host]", "[port]", "[host_port]", "[protocol]").forEach { tag ->
+                        Box(
+                            modifier = Modifier
+                                .background(CyberCardLight, RoundedCornerShape(6.dp))
+                                .border(1.dp, CyberBorder, RoundedCornerShape(6.dp))
+                                .clickable { payloadText += tag }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = tag,
+                                color = NeonGreen,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val gen = PayloadGenerator.generateCustomPayload(
-                        method = selectedMethod,
-                        injectionType = selectedInjection,
-                        customHost = customHost.trim(),
-                        useKeepAlive = useKeepAlive,
-                        useUpgrade = useUpgrade,
-                        useOnlineHost = useOnlineHost
-                    )
-                    onPayloadGenerated(gen)
+                    onPayloadGenerated(payloadText)
                     onDismiss()
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = CyberNavy),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.testTag("save_payload_dialog_button")
             ) {
-                Text("GENERAR PAYLOAD", fontWeight = FontWeight.Bold)
+                Text("GUARDAR PAYLOAD", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {

@@ -73,23 +73,18 @@ class ComprehensiveTunnelTest {
 
     @Test
     fun testPayloadGeneratorAllVariants() {
-        val methods = listOf("CONNECT", "GET", "POST", "HEAD", "TRACE", "OPTIONS", "PUT")
-        val injections = listOf("Front Inject", "Back Inject", "Normal", "Raw")
+        val testPayloads = listOf(
+            "GET / HTTP/1.1[crlf]Host: [host][crlf]Connection: Keep-Alive[crlf][crlf]",
+            "CONNECT [host_port] HTTP/1.1[crlf]Host: [host][crlf]Connection: Keep-Alive[crlf][crlf]",
+            "GET / HTTP/1.1[crlf]Host: target.net[crlf]X-Online-Host: [host][crlf][crlf]"
+        )
 
-        for (m in methods) {
-            for (inj in injections) {
-                val payload = PayloadGenerator.generateCustomPayload(
-                    method = m,
-                    injectionType = inj,
-                    customHost = "target.net",
-                    useKeepAlive = true,
-                    useUpgrade = true,
-                    useOnlineHost = true
-                )
-                assertNotNull(payload)
-                assertTrue("Payload no debe estar vacío", payload.isNotEmpty())
-                assertTrue("Payload debe contener target.net", payload.contains("target.net"))
-            }
+        for (p in testPayloads) {
+            val parsed = PayloadGenerator.parsePayload(p, "target.net", 80)
+            assertNotNull(parsed)
+            assertTrue("Payload no debe estar vacío", parsed.isNotEmpty())
+            assertTrue("Payload debe contener target.net", parsed.contains("target.net"))
+            assertTrue("Payload debe contener saltos de línea CRLF", parsed.contains("\r\n"))
         }
     }
 

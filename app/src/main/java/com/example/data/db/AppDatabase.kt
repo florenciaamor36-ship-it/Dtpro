@@ -51,18 +51,19 @@ abstract class AppDatabase : RoomDatabase() {
             if (dao.getCount() == 0) {
                 val preloaded = listOf(
                     TunnelConfig(
-                        name = "WebSocket SSL (Cloudflare)",
-                        mode = TunnelMode.SSH_WEBSOCKET_SSL,
+                        name = "SSH + HTTP Payload (Puerto 80)",
+                        mode = TunnelMode.SSH_PAYLOAD,
                         serverHost = "",
-                        serverPort = 443,
+                        serverPort = 80,
+                        proxyHost = "",
+                        proxyPort = 80,
                         username = "",
                         password = "",
-                        sniHost = "cloudflare.com",
-                        customPayload = "GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]",
+                        customPayload = "GET / HTTP/1.1[crlf]Host: [host][crlf]Connection: Keep-Alive[crlf][crlf]",
                         isDefault = true
                     ),
                     TunnelConfig(
-                        name = "SSH Direct (TCP)",
+                        name = "SSH Direct (TCP 22)",
                         mode = TunnelMode.SSH_DIRECT,
                         serverHost = "",
                         serverPort = 22,
@@ -71,23 +72,24 @@ abstract class AppDatabase : RoomDatabase() {
                         isDefault = false
                     ),
                     TunnelConfig(
-                        name = "HTTP Custom Payload",
-                        mode = TunnelMode.SSH_PAYLOAD,
-                        serverHost = "",
-                        serverPort = 80,
-                        username = "",
-                        password = "",
-                        customPayload = "CONNECT [host_port] HTTP/1.1[crlf]Host: [host][crlf]Connection: Keep-Alive[crlf][crlf]",
-                        isDefault = false
-                    ),
-                    TunnelConfig(
-                        name = "SSL / TLS Stunnel (SNI)",
+                        name = "SSL / TLS Stunnel (SNI 443)",
                         mode = TunnelMode.SSH_SSL,
                         serverHost = "",
                         serverPort = 443,
                         username = "",
                         password = "",
                         sniHost = "",
+                        isDefault = false
+                    ),
+                    TunnelConfig(
+                        name = "WebSocket SSL",
+                        mode = TunnelMode.SSH_WEBSOCKET_SSL,
+                        serverHost = "",
+                        serverPort = 443,
+                        username = "",
+                        password = "",
+                        sniHost = "",
+                        customPayload = "GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]",
                         isDefault = false
                     )
                 )

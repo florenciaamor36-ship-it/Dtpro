@@ -300,11 +300,13 @@ fun HomeScreen(
 
     if (showPayloadGenerator) {
         PayloadGeneratorDialog(
+            initialPayload = activeConfig?.customPayload ?: "",
             onPayloadGenerated = { payload ->
                 val current = activeConfig
                 if (current != null && !current.isLocked) {
                     val updated = current.copy(customPayload = payload)
                     viewModel.saveConfig(updated)
+                    viewModel.selectConfig(updated)
                 }
             },
             onDismiss = { viewModel.showPayloadGenerator.value = false }

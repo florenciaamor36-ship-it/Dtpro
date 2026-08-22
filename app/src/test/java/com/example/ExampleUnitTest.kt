@@ -34,21 +34,14 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun testPayloadGeneratorCustomBuilder() {
-        val generated = PayloadGenerator.generateCustomPayload(
-            method = "GET",
-            injectionType = "Front Inject",
-            customHost = "bug.operator.com",
-            useKeepAlive = true,
-            useUpgrade = true,
-            useOnlineHost = true
-        )
+    fun testPayloadGeneratorRawUserInput() {
+        val userRawPayload = "GET / HTTP/1.1[crlf]Host: [host][crlf]X-Online-Host: [host][crlf]Connection: Keep-Alive[crlf][crlf]"
+        val parsed = PayloadGenerator.parsePayload(userRawPayload, "custom.server.net", 80)
 
-        assertTrue(generated.startsWith("GET http://bug.operator.com/ HTTP/1.1"))
-        assertTrue(generated.contains("Host: bug.operator.com"))
-        assertTrue(generated.contains("X-Online-Host: bug.operator.com"))
-        assertTrue(generated.contains("Connection: Keep-Alive"))
-        assertTrue(generated.contains("Upgrade: websocket"))
+        assertTrue(parsed.startsWith("GET / HTTP/1.1\r\n"))
+        assertTrue(parsed.contains("Host: custom.server.net\r\n"))
+        assertTrue(parsed.contains("X-Online-Host: custom.server.net\r\n"))
+        assertTrue(parsed.endsWith("\r\n\r\n"))
     }
 
     @Test
