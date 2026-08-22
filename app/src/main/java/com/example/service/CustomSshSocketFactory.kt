@@ -133,7 +133,7 @@ class CustomSshSocketFactory(
 
                 override fun write(b: ByteArray, off: Int, len: Int) {
                     if (len > 0) {
-                        webSocket.send(ByteString.of(b, off, len))
+                        webSocket.send(ByteString.of(*b.copyOfRange(off, off + len)))
                     }
                 }
             }
