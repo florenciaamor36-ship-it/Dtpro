@@ -145,7 +145,7 @@ class TunnelEngine private constructor() {
                 }
             },
             onBinaryMessage = { bytes ->
-                // Los bytes se entregan al socket virtual a través de la factoría
+                socketFactory.getVirtualSocket()?.onIncomingBytes(bytes)
             },
             onFailureCallback = { err, response ->
                 log("Fallo en transporte WebSocket: ${err.message}", LogLevel.ERROR)

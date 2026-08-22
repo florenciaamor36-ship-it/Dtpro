@@ -51,45 +51,43 @@ abstract class AppDatabase : RoomDatabase() {
             if (dao.getCount() == 0) {
                 val preloaded = listOf(
                     TunnelConfig(
-                        name = "DTunnel Cloudflare WS (SSH)",
+                        name = "WebSocket SSL (Cloudflare)",
                         mode = TunnelMode.SSH_WEBSOCKET_SSL,
-                        serverHost = "sg1.dtunnel.network",
+                        serverHost = "",
                         serverPort = 443,
-                        username = "dtunnel_user",
-                        password = "demo_password",
+                        username = "",
+                        password = "",
                         sniHost = "cloudflare.com",
-                        customPayload = "GET / HTTP/1.1[crlf]Host: sg1.dtunnel.network[crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]",
+                        customPayload = "GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]",
                         isDefault = true
                     ),
                     TunnelConfig(
-                        name = "SSH Direct Fast Node",
+                        name = "SSH Direct (TCP)",
                         mode = TunnelMode.SSH_DIRECT,
-                        serverHost = "us1.dtunnel.network",
+                        serverHost = "",
                         serverPort = 22,
-                        username = "free_ssh",
-                        password = "password123",
+                        username = "",
+                        password = "",
                         isDefault = false
                     ),
                     TunnelConfig(
-                        name = "HTTP Custom Payload Injection",
+                        name = "HTTP Custom Payload",
                         mode = TunnelMode.SSH_PAYLOAD,
-                        serverHost = "br1.dtunnel.network",
+                        serverHost = "",
                         serverPort = 80,
-                        username = "brazil_ssh",
-                        password = "secure_pass",
-                        proxyHost = "104.16.132.229",
-                        proxyPort = 80,
-                        customPayload = "CONNECT [host_port] HTTP/1.1[crlf]Host: [host][crlf]X-Online-Host: [host][crlf]Connection: Keep-Alive[crlf][crlf]",
+                        username = "",
+                        password = "",
+                        customPayload = "CONNECT [host_port] HTTP/1.1[crlf]Host: [host][crlf]Connection: Keep-Alive[crlf][crlf]",
                         isDefault = false
                     ),
                     TunnelConfig(
-                        name = "SSL / TLS Stunnel (SNI Bug)",
+                        name = "SSL / TLS Stunnel (SNI)",
                         mode = TunnelMode.SSH_SSL,
-                        serverHost = "eu1.dtunnel.network",
+                        serverHost = "",
                         serverPort = 443,
-                        username = "tls_user",
-                        password = "password",
-                        sniHost = "m.facebook.com",
+                        username = "",
+                        password = "",
+                        sniHost = "",
                         isDefault = false
                     )
                 )

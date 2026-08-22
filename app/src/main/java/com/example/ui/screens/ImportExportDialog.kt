@@ -25,13 +25,18 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
@@ -40,6 +45,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -96,6 +102,7 @@ fun ImportExportDialog(
     var selectedTab by remember { mutableIntStateOf(0) }
 
     // Export States
+    var customExportName by remember(currentConfig) { mutableStateOf(currentConfig?.name ?: "Mi Configuración") }
     var isLocked by remember { mutableStateOf(false) }
     var enableExpiry by remember { mutableStateOf(false) }
     var expiryDaysSelected by remember { mutableIntStateOf(7) }
@@ -108,6 +115,10 @@ fun ImportExportDialog(
     var vpsUrlInput by remember { mutableStateOf("") }
     var creatorNoteInput by remember { mutableStateOf("") }
     var exportedResultString by remember { mutableStateOf("") }
+    var saveSuccessMessage by remember { mutableStateOf("") }
+
+    // Saved Files on Device State
+    var savedFilesList by remember { mutableStateOf(FileHandlerHelper.getSavedConfigsList(context)) }
 
     // Import States
     var importInputText by remember { mutableStateOf("") }
@@ -168,12 +179,20 @@ fun ImportExportDialog(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("EXPORTAR / CERRAR", fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+                        text = { Text("EXPORTAR", fontWeight = FontWeight.Bold, fontSize = 10.sp) }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("IMPORTAR", fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+                        text = { Text("IMPORTAR", fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = {
+                            savedFilesList = FileHandlerHelper.getSavedConfigsList(context)
+                            selectedTab = 2
+                        },
+                        text = { Text("MIS ARCHIVOS (${savedFilesList.size})", fontWeight = FontWeight.Bold, fontSize = 10.sp) }
                     )
                 }
 
@@ -194,9 +213,19 @@ fun ImportExportDialog(
                             fontSize = 13.sp
                         )
                         Text(
-                            text = "Elige si deseas compartir el archivo abierto o cerrarlo con protección por HWID o fecha.",
+                            text = "Elige el nombre del archivo y si deseas compartirlo abierto o cerrado con protección.",
                             color = TextSecondary,
                             fontSize = 11.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Custom Name Field for Export/Locking
+                        DarkTextField(
+                            value = customExportName,
+                            onValueChange = { customExportName = it },
+                            label = "Nombre del Archivo / Perfil de Exportación",
+                            testTag = "custom_export_name_field"
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -438,6 +467,7 @@ fun ImportExportDialog(
 
                         // Action Buttons: Copiar Texto y Compartir como Archivo Físico .dtun
                         val preparedConfig = currentConfig.copy(
+                            name = customExportName.trim().ifBlank { currentConfig.name },
                             isLocked = isLocked,
                             expiryTimestamp = if (enableExpiry) customExpiryTimestamp else 0L,
                             allowedHwids = if (enableHwidLock) targetHwidInput.trim() else "",
@@ -453,6 +483,7 @@ fun ImportExportDialog(
                                 onClick = {
                                     val code = ConfigExporter.exportConfig(preparedConfig)
                                     exportedResultString = code
+                                    saveSuccessMessage = ""
                                     clipboardManager.setText(AnnotatedString(code))
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = CyberNavy),
@@ -466,6 +497,7 @@ fun ImportExportDialog(
 
                             Button(
                                 onClick = {
+                                    saveSuccessMessage = ""
                                     val shareIntent = FileHandlerHelper.shareConfigFile(context, preparedConfig)
                                     if (shareIntent != null) {
                                         context.startActivity(Intent.createChooser(shareIntent, "Enviar archivo .dtun"))
@@ -479,6 +511,28 @@ fun ImportExportDialog(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("COMPARTIR .DTUN", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Botón para Guardar en el Teléfono
+                        Button(
+                            onClick = {
+                                val saveResult = FileHandlerHelper.saveConfigFileToStorage(context, preparedConfig)
+                                if (saveResult.first) {
+                                    saveSuccessMessage = "✓ ¡Archivo '${preparedConfig.name}.dtun' guardado en tu teléfono! Puedes compartirlo más tarde desde la pestaña 'MIS ARCHIVOS'."
+                                    savedFilesList = FileHandlerHelper.getSavedConfigsList(context)
+                                } else {
+                                    saveSuccessMessage = "Error al guardar: ${saveResult.second}"
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberCardLight, contentColor = NeonCyan),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp), tint = NeonCyan)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("GUARDAR EN EL TELÉFONO (PARA DESPUÉS)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
 
                         if (exportedResultString.isNotBlank()) {
@@ -497,8 +551,26 @@ fun ImportExportDialog(
                                 )
                             }
                         }
+
+                        if (saveSuccessMessage.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(CyberCardLight, RoundedCornerShape(8.dp))
+                                    .border(1.dp, NeonGreen, RoundedCornerShape(8.dp))
+                                    .padding(10.dp)
+                            ) {
+                                Text(
+                                    text = saveSuccessMessage,
+                                    color = NeonGreen,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
-                } else {
+                } else if (selectedTab == 1) {
                     // TAB IMPORTAR
                     Text(
                         text = "Importa desde archivo .dtun o pega un enlace 'dtunnel://...':",
@@ -670,6 +742,156 @@ fun ImportExportDialog(
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(text = res.reason, color = TextSecondary, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // TAB 2: MIS ARCHIVOS GUARDADOS (.DTUN)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Archivos guardados en el almacenamiento:",
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                        IconButton(
+                            onClick = {
+                                savedFilesList = FileHandlerHelper.getSavedConfigsList(context)
+                            }
+                        ) {
+                            Icon(imageVector = Icons.Default.Refresh, contentDescription = "Recargar lista", tint = NeonCyan, modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    if (savedFilesList.isEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(CyberCard, RoundedCornerShape(10.dp))
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "No hay archivos .dtun guardados aún",
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "En la pestaña 'EXPORTAR', presiona 'GUARDAR EN EL TELÉFONO'. Tus archivos quedarán almacenados aquí para compartirlos o usarlos en cualquier momento sin volver a configurarlos.",
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            savedFilesList.forEach { savedItem ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(CyberCard, RoundedCornerShape(10.dp))
+                                        .border(1.dp, CyberCardLight, RoundedCornerShape(10.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Description,
+                                            contentDescription = null,
+                                            tint = NeonCyan,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = savedItem.name,
+                                                color = TextPrimary,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
+                                            )
+                                            Text(
+                                                text = "${savedItem.formattedDate} • ${savedItem.sizeKb}",
+                                                color = TextSecondary,
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        // Botón Compartir
+                                        Button(
+                                            onClick = {
+                                                val shareIntent = FileHandlerHelper.shareExistingFile(context, savedItem)
+                                                context.startActivity(Intent.createChooser(shareIntent, "Compartir ${savedItem.name}"))
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen, contentColor = CyberNavy),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("COMPARTIR", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        // Botón Importar / Usar
+                                        Button(
+                                            onClick = {
+                                                val content = FileHandlerHelper.readConfigFromUri(context, savedItem.uri)
+                                                if (!content.isNullOrBlank()) {
+                                                    importInputText = content.trim()
+                                                    val res = ConfigExporter.importConfigDetailed(content.trim())
+                                                    importResult = res
+                                                    if (res is ConfigExporter.ImportResult.Success) {
+                                                        onImportSuccess(res.config)
+                                                        onDismiss()
+                                                    } else {
+                                                        selectedTab = 1
+                                                    }
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = CyberNavy),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("USAR", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        // Botón Eliminar
+                                        IconButton(
+                                            onClick = {
+                                                FileHandlerHelper.deleteSavedFile(savedItem.file)
+                                                savedFilesList = FileHandlerHelper.getSavedConfigsList(context)
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar", tint = NeonRed, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
                                 }
                             }
                         }

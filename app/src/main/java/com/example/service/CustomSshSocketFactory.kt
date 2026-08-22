@@ -28,6 +28,8 @@ class CustomSshSocketFactory(
 
     private var virtualWsSocket: VirtualWebSocketSocket? = null
 
+    fun getVirtualSocket(): VirtualWebSocketSocket? = virtualWsSocket
+
     fun bindWebSocket(ws: WebSocket): VirtualWebSocketSocket {
         val socket = VirtualWebSocketSocket(ws, scope)
         this.virtualWsSocket = socket
