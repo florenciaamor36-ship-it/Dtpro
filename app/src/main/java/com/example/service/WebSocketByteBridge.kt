@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.WebSocket
 import okio.ByteString
+import okio.toByteString
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -41,7 +42,7 @@ class WebSocketByteBridge(
                     val bytesRead = input.read(buffer)
                     if (bytesRead == -1) break
                     if (bytesRead > 0) {
-                        val byteString = ByteString.of(buffer, 0, bytesRead)
+                        val byteString = buffer.toByteString(0, bytesRead)
                         val sent = webSocket.send(byteString)
                         if (!sent) break
                     }
