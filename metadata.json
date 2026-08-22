@@ -1,0 +1,7 @@
+{
+  "name": "DTunnel Manager",
+  "description": "Herramienta completa de túnel y cliente VPN con soporte para SSH, WebSocket, SSL/TLS, Payload HTTP y SOCKS5.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
