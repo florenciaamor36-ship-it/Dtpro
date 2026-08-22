@@ -63,7 +63,15 @@ class DTunnelVpnService : VpnService() {
         when (intent?.action) {
             ACTION_CONNECT -> {
                 BatteryManagerHelper.acquireWakeLock(this)
-                startForeground(NOTIFICATION_ID, buildNotification("Iniciando conexión...", "DTunnel"))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        buildNotification("Iniciando conexión...", "DTunnel"),
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, buildNotification("Iniciando conexión...", "DTunnel"))
+                }
                 observeTunnelState()
                 establishVpn()
             }
