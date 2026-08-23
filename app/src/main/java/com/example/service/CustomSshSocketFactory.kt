@@ -5,20 +5,63 @@ import com.example.data.model.TunnelMode
 import com.example.util.PayloadGenerator
 import com.jcraft.jsch.SocketFactory
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import okhttp3.WebSocket
 import okio.ByteString
-import okio.ByteString.Companion.toByteString
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
 import java.io.PushbackInputStream
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
-import javax.net.ssl.SSLParameters
 import javax.net.ssl.SNIHostName
+import javax.net.ssl.SSLParameters
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
+
+class VirtualWebSocketSocket(
+    private val webSocket: WebSocket,
+    private val scope: CoroutineScope
+) : Socket() {
+    private val inPipe = PipedInputStream(65536)
+    private val outPipe = PipedOutputStream(inPipe)
+
+    private val virtualOutputStream = object : OutputStream() {
+        override fun write(b: Int) {
+            val arr = byteArrayOf(b.toByte())
+            webSocket.send(ByteString.of(*arr))
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            if (len > 0) {
+                val copy = b.copyOfRange(off, off + len)
+                webSocket.send(ByteString.of(*copy))
+            }
+        }
+    }
+
+    fun onIncomingBytes(bytes: ByteString) {
+        try {
+            outPipe.write(bytes.toByteArray())
+            outPipe.flush()
+        } catch (_: Exception) {}
+    }
+
+    override fun getInputStream(): InputStream = inPipe
+    override fun getOutputStream(): OutputStream = virtualOutputStream
+    override fun isConnected(): Boolean = true
+    override fun isClosed(): Boolean = false
+    override fun close() {
+        try { inPipe.close() } catch (_: Exception) {}
+        try { outPipe.close() } catch (_: Exception) {}
+        try { webSocket.close(1000, "Closed") } catch (_: Exception) {}
+    }
+}
 
 class CustomSshSocketFactory(
     private val config: TunnelConfig,
@@ -96,14 +139,26 @@ class CustomSshSocketFactory(
                 socket.connect(InetSocketAddress(frontHost, frontPort), 15000)
                 logCallback("✓ Socket TCP conectado a $frontHost:$frontPort")
 
-                // Enviar el payload completo sin alteraciones
+                // Enviar payload con soporte de inyección partida [split] y retardos [delay_split]
                 if (config.customPayload.isNotBlank()) {
-                    val parsedPayload = PayloadGenerator.parsePayload(config.customPayload, targetHost, targetPort)
-                    logCallback("Enviando Payload HTTP completo (${parsedPayload.length} caracteres)...")
+                    val payloadChunks = PayloadGenerator.splitPayload(config.customPayload, targetHost, targetPort)
                     val output = socket.getOutputStream()
-                    output.write(parsedPayload.toByteArray(Charsets.ISO_8859_1))
-                    output.flush()
-                    logCallback("✓ Payload enviado al Host Frontal. Esperando respuesta...")
+                    
+                    if (payloadChunks.size > 1) {
+                        logCallback("Iniciando Inyección Partida (Payload Split en ${payloadChunks.size} partes)...")
+                    }
+
+                    for ((chunkIndex, chunkPair) in payloadChunks.withIndex()) {
+                        val (chunkText, delayMs) = chunkPair
+                        if (delayMs > 0) {
+                            logCallback("Aplicando retardo de inyección ($delayMs ms)...")
+                            Thread.sleep(delayMs)
+                        }
+                        logCallback("Enviando fragmento ${chunkIndex + 1}/${payloadChunks.size} (${chunkText.length} bytes)...")
+                        output.write(chunkText.toByteArray(Charsets.ISO_8859_1))
+                        output.flush()
+                    }
+                    logCallback("✓ Payload completado y enviado al Host Frontal. Esperando respuesta...")
                 }
 
                 // Leer y verificar respuesta inicial (Consumir encabezados HTTP 200/101 o pasar stream limpio si es banner SSH)
@@ -133,6 +188,15 @@ class CustomSshSocketFactory(
                 lastCreatedSocket = socket
                 return socket
             }
+
+            else -> {
+                val socket = Socket()
+                socket.tcpNoDelay = true
+                socket.soTimeout = 20000
+                socket.connect(InetSocketAddress(targetHost, targetPort), 15000)
+                lastCreatedSocket = socket
+                return socket
+            }
         }
     }
 
@@ -143,94 +207,48 @@ class CustomSshSocketFactory(
 
         val prefix = String(checkBuf, 0, readBytes, Charsets.ISO_8859_1)
         if (prefix.startsWith("HTTP/", ignoreCase = true)) {
-            // El proxy o frontal respondió con cabeceras HTTP. Leemos la línea de estado y los headers.
-            val statusLineSb = StringBuilder(prefix)
-            var b: Int
-            while (pushbackIn.read().also { b = it } != -1) {
-                statusLineSb.append(b.toChar())
-                if (b == '\n'.code) break
-            }
-            val statusLine = statusLineSb.toString().trim()
-            logCallback("Respuesta HTTP del Frontal: $statusLine")
-
-            // Consumir el resto de las cabeceras hasta \r\n\r\n o \n\n
-            var lineBreakCount = 0
-            while (pushbackIn.read().also { b = it } != -1) {
-                if (b == '\n'.code) {
-                    lineBreakCount++
-                    if (lineBreakCount >= 2) break
-                } else if (b != '\r'.code) {
-                    lineBreakCount = 0
+            logCallback("Respuesta HTTP detectada del Proxy/Servidor. Consumiendo cabeceras...")
+            // Consumir hasta encontrar CRLF CRLF (\r\n\r\n o \n\n)
+            var state = 0
+            while (true) {
+                val b = pushbackIn.read()
+                if (b == -1) break
+                if (b == '\r'.code) {
+                    if (state == 0 || state == 2) state++ else state = 1
+                } else if (b == '\n'.code) {
+                    if (state == 1) state = 2
+                    else if (state == 3 || state == 0) break
+                    else state = 0
+                } else {
+                    state = 0
                 }
             }
-            logCallback("✓ Encabezados HTTP procesados. Canal listo para autenticación SSH.")
+            logCallback("✓ Cabeceras HTTP consumidas. Canal directo establecido para SSH.")
         } else {
-            // No es HTTP (por ejemplo, el servidor SSH ya envió directamente 'SSH-2.0...').
-            // Reintroducimos los bytes leídos en el stream para que JSch los lea completos.
+            // No es HTTP (ej: Banner SSH-2.0 directo), devolver los bytes leídos al stream
             pushbackIn.unread(checkBuf, 0, readBytes)
-            logCallback("Canal TCP listo. Iniciando intercambio SSH...")
+            logCallback("Respuesta de socket transparente (Banner SSH directo).")
         }
     }
 
     override fun getInputStream(socket: Socket): InputStream = socket.getInputStream()
+
     override fun getOutputStream(socket: Socket): OutputStream = socket.getOutputStream()
-
-    class PayloadSocketWrapper(
-        private val underlyingSocket: Socket,
-        private val inStream: InputStream
-    ) : Socket() {
-        override fun getInputStream(): InputStream = inStream
-        override fun getOutputStream(): OutputStream = underlyingSocket.getOutputStream()
-        override fun close() = underlyingSocket.close()
-        override fun isConnected(): Boolean = underlyingSocket.isConnected
-        override fun isClosed(): Boolean = underlyingSocket.isClosed
-        override fun setSoTimeout(timeout: Int) { underlyingSocket.soTimeout = timeout }
-        override fun getSoTimeout(): Int = underlyingSocket.soTimeout
-        override fun setTcpNoDelay(on: Boolean) { underlyingSocket.tcpNoDelay = on }
-        override fun getTcpNoDelay(): Boolean = underlyingSocket.tcpNoDelay
-    }
-
-    class VirtualWebSocketSocket(
-        private val webSocket: WebSocket,
-        scope: CoroutineScope
-    ) : Socket() {
-        private val inPipe = PipedInputStream(65536)
-        private val outPipeSink = PipedOutputStream(inPipe)
-        private val bridge = WebSocketByteBridge(webSocket, scope)
-
-        init {
-            bridge.attachOutputStream(outPipeSink)
-        }
-
-        fun onIncomingBytes(bytes: ByteString) {
-            bridge.onBinaryMessageReceived(bytes)
-        }
-
-        override fun getInputStream(): InputStream = inPipe
-
-        override fun getOutputStream(): OutputStream {
-            return object : OutputStream() {
-                override fun write(b: Int) {
-                    val arr = byteArrayOf(b.toByte())
-                    webSocket.send(arr.toByteString(0, 1))
-                }
-
-                override fun write(b: ByteArray, off: Int, len: Int) {
-                    if (len > 0) {
-                        webSocket.send(b.toByteString(off, len))
-                    }
-                }
-            }
-        }
-
-        override fun close() {
-            try { inPipe.close() } catch (_: Exception) {}
-            try { outPipeSink.close() } catch (_: Exception) {}
-            bridge.stop()
-        }
-
-        override fun isConnected(): Boolean = true
-        override fun isClosed(): Boolean = false
-    }
 }
 
+/**
+ * Wrapper de Socket para conservar el PushbackInputStream una vez consumidas las cabeceras HTTP
+ */
+class PayloadSocketWrapper(
+    private val rawSocket: Socket,
+    private val pushbackInputStream: PushbackInputStream
+) : Socket() {
+    override fun getInputStream(): InputStream = pushbackInputStream
+    override fun getOutputStream(): OutputStream = rawSocket.getOutputStream()
+    override fun isConnected(): Boolean = rawSocket.isConnected
+    override fun isClosed(): Boolean = rawSocket.isClosed
+    override fun close() = rawSocket.close()
+    override fun getInetAddress(): InetAddress = rawSocket.inetAddress
+    override fun getPort(): Int = rawSocket.port
+    override fun getLocalPort(): Int = rawSocket.localPort
+}

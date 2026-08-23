@@ -15,12 +15,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.NetworkPing
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,11 +37,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.service.TunnelEngine
 import com.example.ui.theme.CyberBorder
 import com.example.ui.theme.CyberCard
 import com.example.ui.theme.CyberNavy
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonGreen
+import com.example.ui.theme.NeonOrange
+import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
@@ -54,6 +60,7 @@ fun ToolsDialog(
 ) {
     var hostToPing by remember { mutableStateOf("1.1.1.1") }
     var portToPingText by remember { mutableStateOf("443") }
+    var hotshareEnabled by remember { mutableStateOf(TunnelEngine.instance.isHotshareActive()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -98,7 +105,48 @@ fun ToolsDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Hotshare / Tethering (Compartir VPN vía WiFi Hotspot)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(CyberCard, RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.WifiTethering, contentDescription = null, tint = NeonOrange)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Hotshare / Compartir VPN", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Text("Proxy HTTP en puerto 8080", color = TextMuted, fontSize = 11.sp)
+                            }
+                        }
+                        Switch(
+                            checked = hotshareEnabled,
+                            onCheckedChange = { active ->
+                                hotshareEnabled = active
+                                TunnelEngine.instance.toggleHotshare(active, 8080)
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = NeonOrange, checkedTrackColor = CyberBorder)
+                        )
+                    }
+                    if (hotshareEnabled) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "✓ Activo en 192.168.43.1:8080. Configura el proxy en tu PC/Consola.",
+                            color = NeonGreen,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Ping / Host Latency Tester
                 Text("TEST DE PING Y PUERTO (TCP HANDSHAKE)", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)

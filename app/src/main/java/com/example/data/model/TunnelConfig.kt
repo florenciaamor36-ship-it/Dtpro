@@ -22,9 +22,21 @@ data class TunnelConfig(
     val dnsSecondary: String = "8.8.4.4",
     val autoReconnect: Boolean = true,
     val isDefault: Boolean = false,
+
+    // Opciones de Bloqueo y Seguridad del Archivo (.dtun)
     val isLocked: Boolean = false,
     val expiryTimestamp: Long = 0L,
     val allowedHwids: String = "",
     val vpsAuthUrl: String = "",
-    val creatorNote: String = ""
+    val creatorNote: String = "",
+
+    // Bloqueos Avanzados de Archivos (Estilo HTTP Injector / HTTP Custom / TLS Tunnel)
+    val blockRoot: Boolean = false,
+    val allowedCarriers: String = "",
+    val blockWifi: Boolean = false,
+    val blockMobileData: Boolean = false,
+    val blockSniffers: Boolean = false,
+    val blockHotshare: Boolean = false,
+    val lockPassword: String = "",
+    val showToastOnConnect: String = ""
 )

@@ -14,6 +14,7 @@ import com.example.MainActivity
 import com.example.R
 import com.example.data.model.ConnectionStatus
 import com.example.data.model.TunnelConfig
+import com.example.util.AppFilterManager
 import com.example.util.BatteryManagerHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -98,6 +99,28 @@ class DTunnelVpnService : VpnService() {
             try {
                 builder.addDnsServer(dns2)
             } catch (_: Exception) {}
+
+            // Aplicar Split Tunneling / Filtro de Aplicaciones
+            if (AppFilterManager.isFilterEnabled(this)) {
+                val selectedApps = AppFilterManager.getSelectedApps(this)
+                val mode = AppFilterManager.getFilterMode(this)
+
+                if (selectedApps.isNotEmpty()) {
+                    for (pkg in selectedApps) {
+                        try {
+                            if (mode == "INCLUDE") {
+                                builder.addAllowedApplication(pkg)
+                            } else {
+                                builder.addDisallowedApplication(pkg)
+                            }
+                        } catch (e: Exception) {
+                            TunnelEngine.instance.log("Aviso en filtro de app ($pkg): ${e.message}", com.example.data.model.LogLevel.WARNING)
+                        }
+                    }
+                    val actionName = if (mode == "INCLUDE") "Enrutando exclusivamente" else "Excluyendo del túnel"
+                    TunnelEngine.instance.log("✓ Split Tunneling activo: $actionName ${selectedApps.size} apps.", com.example.data.model.LogLevel.INFO)
+                }
+            }
 
             vpnInterface = builder.establish()
             TunnelEngine.instance.log("Interfaz TUN VPN establecida (10.0.0.2/24)", com.example.data.model.LogLevel.SUCCESS)

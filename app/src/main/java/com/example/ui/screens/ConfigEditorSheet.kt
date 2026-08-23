@@ -168,7 +168,7 @@ fun ConfigEditorSheet(
                             },
                             onClick = {
                                 mode = m
-                                if (portText.isBlank() || portText == "22" || portText == "80" || portText == "443" || portText == "8080") {
+                                if (portText.isBlank() || portText == "22" || portText == "80" || portText == "443" || portText == "8080" || portText == "7300") {
                                     portText = m.defaultPort.toString()
                                 }
                                 isModeDropdownExpanded = false
@@ -203,32 +203,49 @@ fun ConfigEditorSheet(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Campo Multilínea de Payload Completo
+                // Campo Multilínea de Payload Completo (Ingreso Manual)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Payload completo",
-                        color = NeonCyan,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            val clipText = clipboardManager.getText()?.text
-                            if (!clipText.isNullOrBlank()) {
-                                payload = clipText
-                            }
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(30.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan)
-                    ) {
-                        Icon(imageVector = Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(12.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("PEGAR", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Column {
+                        Text(
+                            text = "PAYLOAD MANUAL",
+                            color = NeonCyan,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Ingresa o edita el payload HTTP manualmente",
+                            color = TextMuted,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(
+                            onClick = onOpenPayloadGenerator,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(30.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen.copy(alpha = 0.2f), contentColor = NeonGreen)
+                        ) {
+                            Text("✨ GENERADOR", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                val clipText = clipboardManager.getText()?.text
+                                if (!clipText.isNullOrBlank()) {
+                                    payload = clipText
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(30.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan)
+                        ) {
+                            Icon(imageVector = Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("PEGAR", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
 
@@ -311,6 +328,52 @@ fun ConfigEditorSheet(
                         testTag = "config_port_input"
                     )
                 }
+            } else if (mode == TunnelMode.V2RAY_VMESS) {
+                // Modo V2Ray VMess / VLESS
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    DarkTextField(
+                        value = host,
+                        onValueChange = { host = it },
+                        label = "Host / IP del Servidor V2Ray",
+                        modifier = Modifier.weight(2.5f),
+                        testTag = "config_host_input"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    DarkTextField(
+                        value = portText,
+                        onValueChange = { portText = it },
+                        label = "Puerto",
+                        modifier = Modifier.weight(1f),
+                        testTag = "config_port_input"
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                DarkTextField(
+                    value = sniHost,
+                    onValueChange = { sniHost = it },
+                    label = "SNI / Host TLS (ej: bug.host.com)",
+                    testTag = "config_sni_input"
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                DarkTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = "UUID / ID de Usuario V2Ray",
+                    testTag = "config_pass_input"
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                DarkTextField(
+                    value = payload,
+                    onValueChange = { payload = it },
+                    label = "WebSocket Path (ej: /vmess)",
+                    testTag = "config_payload_input"
+                )
             } else {
                 // Modos Directo, SSL o WebSocket
                 Row(modifier = Modifier.fillMaxWidth()) {
@@ -360,25 +423,27 @@ fun ConfigEditorSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            if (mode != TunnelMode.V2RAY_VMESS) {
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Credenciales SSH
-            Row(modifier = Modifier.fillMaxWidth()) {
-                DarkTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = "Usuario SSH",
-                    modifier = Modifier.weight(1f),
-                    testTag = "config_user_input"
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                DarkTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = "Contraseña SSH",
-                    modifier = Modifier.weight(1f),
-                    testTag = "config_pass_input"
-                )
+                // Credenciales SSH
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    DarkTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = "Usuario SSH",
+                        modifier = Modifier.weight(1f),
+                        testTag = "config_user_input"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    DarkTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = "Contraseña SSH",
+                        modifier = Modifier.weight(1f),
+                        testTag = "config_pass_input"
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -408,8 +473,8 @@ fun ConfigEditorSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(text = "Reenvío UDP / Juegos", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                    Text(text = "Habilitar soporte para tráfico UDP", color = TextMuted, fontSize = 11.sp)
+                    Text(text = "Reenvío UDP / BadVPN / Juegos", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                    Text(text = "Habilitar soporte para tráfico UDP (puerto 7300)", color = TextMuted, fontSize = 11.sp)
                 }
                 Switch(
                     checked = udpForwarding,

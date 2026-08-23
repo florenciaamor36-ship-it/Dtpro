@@ -106,7 +106,10 @@ fun ServersListSheet(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Action Buttons
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Button(
                     onClick = {
                         onDismiss()
@@ -118,9 +121,25 @@ fun ServersListSheet(
                         .weight(1f)
                         .testTag("add_new_server_button")
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = null)
+                    Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("NUEVO SERVIDOR", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("NUEVO MANUAL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+
+                Button(
+                    onClick = {
+                        onDismiss()
+                        onOpenImportExport()
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = CyberCardLight, contentColor = NeonGreen),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("import_server_button")
+                ) {
+                    Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = NeonGreen)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("IMPORTAR .DTUN", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
             }
 
@@ -136,6 +155,21 @@ fun ServersListSheet(
                 items(configs, key = { it.id }) { item ->
                     val isSelected = selectedConfig?.id == item.id
                     val isLocked = item.isLocked
+
+                    val configTypeBadge = when {
+                        !isLocked -> "🔓 ABIERTO"
+                        item.vpsAuthUrl.isNotBlank() -> "🌐 COLECTIVO VPS"
+                        item.allowedHwids.isNotBlank() -> "📱 BLOQUEO HWID"
+                        item.expiryTimestamp > 0 -> "⏳ POR FECHA"
+                        else -> "🔒 CERRADO"
+                    }
+
+                    val badgeColor = when {
+                        !isLocked -> NeonGreen
+                        item.vpsAuthUrl.isNotBlank() -> NeonCyan
+                        item.allowedHwids.isNotBlank() -> NeonOrange
+                        else -> NeonOrange
+                    }
 
                     Row(
                         modifier = Modifier
@@ -176,20 +210,18 @@ fun ServersListSheet(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
-                                if (isLocked) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .background(NeonOrange.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                            .padding(horizontal = 4.dp, vertical = 1.dp)
-                                    ) {
-                                        Text("🔒 CERRADO", color = NeonOrange, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                                    }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(badgeColor.copy(alpha = 0.18f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                ) {
+                                    Text(configTypeBadge, color = badgeColor, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "${item.mode.title} • ${item.serverHost.ifBlank { "0.0.0.0" }}:${item.serverPort}",
+                                text = "${item.mode.title} • ${item.serverHost.ifBlank { "Host Manual" }}:${item.serverPort}",
                                 color = TextSecondary,
                                 fontSize = 12.sp
                             )
@@ -201,6 +233,13 @@ fun ServersListSheet(
                                     color = if (isExpired) NeonRed else NeonGreen,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
+                                )
+                            }
+                            if (item.vpsAuthUrl.isNotBlank()) {
+                                Text(
+                                    text = "⚡ Validación Remota Colectiva",
+                                    color = NeonCyan,
+                                    fontSize = 10.sp
                                 )
                             }
                         }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
@@ -94,6 +95,7 @@ fun HomeScreen(
     val editingConfig by viewModel.editingConfig.collectAsState()
     val showServersSheet by viewModel.showServersSheet.collectAsState()
     val showPayloadGenerator by viewModel.showPayloadGenerator.collectAsState()
+    val showAppFilterDialog by viewModel.showAppFilterDialog.collectAsState()
     val showToolsDialog by viewModel.showToolsDialog.collectAsState()
     val showSettingsDialog by viewModel.showSettingsDialog.collectAsState()
     val showImportExportDialog by viewModel.showImportExportDialog.collectAsState()
@@ -229,24 +231,31 @@ fun HomeScreen(
                     onClick = { viewModel.showServersSheet.value = true },
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 QuickToolButton(
                     icon = Icons.Default.Code,
                     label = "Payload",
                     onClick = { viewModel.showPayloadGenerator.value = true },
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                QuickToolButton(
+                    icon = Icons.Default.Apps,
+                    label = "Filtro Apps",
+                    onClick = { viewModel.showAppFilterDialog.value = true },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 QuickToolButton(
                     icon = Icons.Default.Share,
                     label = "Archivos",
                     onClick = { viewModel.showImportExportDialog.value = true },
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 QuickToolButton(
                     icon = Icons.Default.Dns,
-                    label = "DNS / Ajustes",
+                    label = "Ajustes",
                     onClick = { viewModel.showSettingsDialog.value = true },
                     modifier = Modifier.weight(1f)
                 )
@@ -310,6 +319,12 @@ fun HomeScreen(
                 }
             },
             onDismiss = { viewModel.showPayloadGenerator.value = false }
+        )
+    }
+
+    if (showAppFilterDialog) {
+        com.example.ui.components.AppFilterDialog(
+            onDismiss = { viewModel.showAppFilterDialog.value = false }
         )
     }
 
@@ -448,13 +463,28 @@ private fun ActiveServerCard(
     onEditServer: () -> Unit
 ) {
     val isLocked = config?.isLocked == true
+    val configTypeBadge = when {
+        config == null -> "SIN PERFIL"
+        !isLocked -> "🔓 MANUAL / ABIERTO"
+        config.vpsAuthUrl.isNotBlank() -> "🌐 COLECTIVO VPS"
+        config.allowedHwids.isNotBlank() -> "📱 BLOQUEO HWID"
+        config.expiryTimestamp > 0 -> "⏳ POR FECHA"
+        else -> "🔒 CERRADO"
+    }
+
+    val badgeColor = when {
+        config == null -> TextMuted
+        !isLocked -> NeonGreen
+        config.vpsAuthUrl.isNotBlank() -> NeonCyan
+        else -> NeonOrange
+    }
 
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = CyberCard),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, if (isLocked) NeonCyan.copy(alpha = 0.5f) else CyberBorder, RoundedCornerShape(16.dp))
+            .border(1.dp, if (isLocked) NeonOrange.copy(alpha = 0.5f) else NeonCyan.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
     ) {
         Column(
             modifier = Modifier
@@ -486,24 +516,23 @@ private fun ActiveServerCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = config?.name ?: "Seleccionar Servidor",
+                            text = config?.name ?: "Ingresar Servidor Manual",
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
-                        if (isLocked) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .background(NeonOrange.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 5.dp, vertical = 1.dp)
-                            ) {
-                                Text("🔒 CERRADO", color = NeonOrange, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(badgeColor.copy(alpha = 0.18f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(configTypeBadge, color = badgeColor, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                         }
                     }
+                    val hostDisplay = config?.serverHost?.ifBlank { "Host Manual (Sin configurar)" } ?: "Toca para configurar"
                     Text(
-                        text = "${config?.mode?.title ?: "SSH"} • ${config?.serverHost?.ifBlank { "0.0.0.0" } ?: ""}:${config?.serverPort ?: 22}",
+                        text = "${config?.mode?.title ?: "SSH"} • $hostDisplay:${config?.serverPort ?: 22}",
                         color = TextSecondary,
                         fontSize = 12.sp
                     )
@@ -532,7 +561,7 @@ private fun ActiveServerCard(
             }
 
             // Expiry & Note Info if present
-            if (config != null && (config.expiryTimestamp > 0 || config.creatorNote.isNotBlank())) {
+            if (config != null && (config.expiryTimestamp > 0 || config.creatorNote.isNotBlank() || config.vpsAuthUrl.isNotBlank())) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier
@@ -560,6 +589,15 @@ private fun ActiveServerCard(
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                    }
+
+                    if (config.vpsAuthUrl.isNotBlank()) {
+                        Text(
+                            text = "🌐 Auth VPS Remoto",
+                            color = NeonCyan,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     if (config.creatorNote.isNotBlank()) {

@@ -37,8 +37,14 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -116,6 +122,14 @@ fun ImportExportDialog(
     var creatorNoteInput by remember { mutableStateOf("") }
     var exportedResultString by remember { mutableStateOf("") }
     var saveSuccessMessage by remember { mutableStateOf("") }
+
+    // Advanced Lock Options (Root, Carrier, Network, Anti-Sniffer, Connect Message)
+    var enableRootBlock by remember { mutableStateOf(false) }
+    var enableCarrierLock by remember { mutableStateOf(false) }
+    var allowedCarriersInput by remember { mutableStateOf("") }
+    var networkLockType by remember { mutableIntStateOf(0) } // 0: Cualquiera, 1: Solo Datos, 2: Solo Wi-Fi
+    var enableSnifferBlock by remember { mutableStateOf(false) }
+    var welcomeToastInput by remember { mutableStateOf("") }
 
     // Saved Files on Device State
     var savedFilesList by remember { mutableStateOf(FileHandlerHelper.getSavedConfigsList(context)) }
@@ -228,7 +242,77 @@ fun ImportExportDialog(
                             testTag = "custom_export_name_field"
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Modalidad Rápida de Exportación (4 Tipos)
+                        Text(
+                            text = "MODALIDAD DE PROTECCIÓN:",
+                            color = NeonCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            FilterChip(
+                                selected = !isLocked,
+                                onClick = {
+                                    isLocked = false
+                                    enableExpiry = false
+                                    enableHwidLock = false
+                                    enableVpsAuth = false
+                                },
+                                label = { Text("🔓 Abierto", fontSize = 10.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = NeonGreen.copy(alpha = 0.2f),
+                                    selectedLabelColor = NeonGreen
+                                )
+                            )
+                            FilterChip(
+                                selected = isLocked && enableExpiry && !enableHwidLock && !enableVpsAuth,
+                                onClick = {
+                                    isLocked = true
+                                    enableExpiry = true
+                                    enableHwidLock = false
+                                    enableVpsAuth = false
+                                },
+                                label = { Text("⏳ Por Fecha", fontSize = 10.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = NeonOrange.copy(alpha = 0.2f),
+                                    selectedLabelColor = NeonOrange
+                                )
+                            )
+                            FilterChip(
+                                selected = isLocked && enableHwidLock && !enableVpsAuth,
+                                onClick = {
+                                    isLocked = true
+                                    enableHwidLock = true
+                                    enableVpsAuth = false
+                                    if (targetHwidInput.isBlank()) targetHwidInput = myHwid
+                                },
+                                label = { Text("📱 Por HWID", fontSize = 10.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = NeonCyan.copy(alpha = 0.2f),
+                                    selectedLabelColor = NeonCyan
+                                )
+                            )
+                            FilterChip(
+                                selected = isLocked && enableVpsAuth,
+                                onClick = {
+                                    isLocked = true
+                                    enableVpsAuth = true
+                                },
+                                label = { Text("🌐 VPS Colectivo", fontSize = 10.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = NeonCyan.copy(alpha = 0.2f),
+                                    selectedLabelColor = NeonCyan
+                                )
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         // Switch: Bloquear / Cerrar archivo
                         Row(
@@ -456,11 +540,255 @@ fun ImportExportDialog(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
+                        // ================= BLOQUEOS AVANZADOS ADICIONALES =================
+                        Text(
+                            text = "BLOQUEOS DE SEGURIDAD AVANZADOS:",
+                            color = NeonCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // 1. Bloqueo Root (Anti-Root)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(CyberCard, RoundedCornerShape(10.dp))
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = if (enableRootBlock) NeonRed else TextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Bloquear Dispositivos Root",
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        text = "Prohíbe el uso en equipos con Root / Magisk / KernelSU",
+                                        color = TextMuted,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = enableRootBlock,
+                                onCheckedChange = { enableRootBlock = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = NeonRed, checkedTrackColor = CyberBorder)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // 2. Bloqueo por Operadora / Carrier Lock
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(CyberCard, RoundedCornerShape(10.dp))
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(
+                                    imageVector = Icons.Default.SimCard,
+                                    contentDescription = null,
+                                    tint = if (enableCarrierLock) NeonCyan else TextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Bloqueo por Operadora Móvil",
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        text = "Permitir solo operadoras específicas (SIM celular)",
+                                        color = TextMuted,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = enableCarrierLock,
+                                onCheckedChange = { enableCarrierLock = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = NeonCyan, checkedTrackColor = CyberBorder)
+                            )
+                        }
+
+                        if (enableCarrierLock) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            DarkTextField(
+                                value = allowedCarriersInput,
+                                onValueChange = { allowedCarriersInput = it },
+                                label = "Operadoras Permitidas (ej: Claro, Movistar, Personal, Tigo, Telcel)",
+                                minLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                listOf("Claro", "Movistar", "Personal", "Tigo", "Telcel", "Vivo", "Entel").forEach { carrier ->
+                                    FilterChip(
+                                        selected = allowedCarriersInput.contains(carrier, ignoreCase = true),
+                                        onClick = {
+                                            if (allowedCarriersInput.contains(carrier, ignoreCase = true)) {
+                                                allowedCarriersInput = allowedCarriersInput.split(",")
+                                                    .map { it.trim() }
+                                                    .filter { !it.equals(carrier, ignoreCase = true) }
+                                                    .joinToString(",")
+                                            } else {
+                                                allowedCarriersInput = if (allowedCarriersInput.isBlank()) carrier else "$allowedCarriersInput,$carrier"
+                                            }
+                                        },
+                                        label = { Text(carrier, fontSize = 9.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = NeonCyan.copy(alpha = 0.2f),
+                                            selectedLabelColor = NeonCyan
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // 3. Bloqueo por Tipo de Red (Wi-Fi vs Datos Móviles)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(CyberCard, RoundedCornerShape(10.dp))
+                                .padding(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (networkLockType == 1) Icons.Default.SignalCellularAlt else if (networkLockType == 2) Icons.Default.Wifi else Icons.Default.WifiOff,
+                                    contentDescription = null,
+                                    tint = if (networkLockType != 0) NeonOrange else TextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Bloqueo por Tipo de Conexión",
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        text = when (networkLockType) {
+                                            1 -> "📱 Obligatorio Datos Móviles (Wi-Fi Bloqueado)"
+                                            2 -> "📡 Obligatorio Wi-Fi (Datos Móviles Bloqueados)"
+                                            else -> "🌐 Permitir cualquier tipo de red"
+                                        },
+                                        color = if (networkLockType != 0) NeonOrange else TextMuted,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                FilterChip(
+                                    selected = networkLockType == 0,
+                                    onClick = { networkLockType = 0 },
+                                    label = { Text("🌐 Cualquier Red", fontSize = 10.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = CyberBorder,
+                                        selectedLabelColor = TextPrimary
+                                    )
+                                )
+                                FilterChip(
+                                    selected = networkLockType == 1,
+                                    onClick = { networkLockType = 1 },
+                                    label = { Text("📱 Solo Datos", fontSize = 10.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = NeonOrange.copy(alpha = 0.2f),
+                                        selectedLabelColor = NeonOrange
+                                    )
+                                )
+                                FilterChip(
+                                    selected = networkLockType == 2,
+                                    onClick = { networkLockType = 2 },
+                                    label = { Text("📡 Solo Wi-Fi", fontSize = 10.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = NeonCyan.copy(alpha = 0.2f),
+                                        selectedLabelColor = NeonCyan
+                                    )
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // 4. Bloqueo Anti-Sniffer
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(CyberCard, RoundedCornerShape(10.dp))
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(
+                                    imageVector = Icons.Default.Shield,
+                                    contentDescription = null,
+                                    tint = if (enableSnifferBlock) NeonRed else TextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Protección Anti-Sniffer & Anti-Debug",
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        text = "Bloquea si hay apps de captura (HttpCanary, PacketCapture)",
+                                        color = TextMuted,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = enableSnifferBlock,
+                                onCheckedChange = { enableSnifferBlock = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = NeonRed, checkedTrackColor = CyberBorder)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // 5. Mensaje Emergente al Conectar
+                        DarkTextField(
+                            value = welcomeToastInput,
+                            onValueChange = { welcomeToastInput = it },
+                            label = "Mensaje Emergente / Aviso al Conectar (Opcional)"
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         // Creator Note
                         DarkTextField(
                             value = creatorNoteInput,
                             onValueChange = { creatorNoteInput = it },
-                            label = "Mensaje / Nota del Creador (Opcional)"
+                            label = "Nota del Creador (Se muestra al importar)"
                         )
 
                         Spacer(modifier = Modifier.height(14.dp))
@@ -472,7 +800,13 @@ fun ImportExportDialog(
                             expiryTimestamp = if (enableExpiry) customExpiryTimestamp else 0L,
                             allowedHwids = if (enableHwidLock) targetHwidInput.trim() else "",
                             vpsAuthUrl = if (enableVpsAuth) vpsUrlInput.trim() else "",
-                            creatorNote = creatorNoteInput.trim()
+                            creatorNote = creatorNoteInput.trim(),
+                            blockRoot = enableRootBlock,
+                            allowedCarriers = if (enableCarrierLock) allowedCarriersInput.trim() else "",
+                            blockWifi = networkLockType == 1,
+                            blockMobileData = networkLockType == 2,
+                            blockSniffers = enableSnifferBlock,
+                            showToastOnConnect = welcomeToastInput.trim()
                         )
 
                         Row(
@@ -699,6 +1033,46 @@ fun ImportExportDialog(
                                             text = "📱 HWID: ${hwidCheck.second}",
                                             color = if (hwidCheck.first) NeonGreen else NeonRed,
                                             fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    if (conf.blockRoot) {
+                                        Text(
+                                            text = "🚫 Bloqueo Root Activo (No permitido en dispositivos con Root)",
+                                            color = NeonRed,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    if (conf.allowedCarriers.isNotBlank()) {
+                                        Text(
+                                            text = "📶 Solo Operadoras: ${conf.allowedCarriers}",
+                                            color = NeonCyan,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    if (conf.blockWifi) {
+                                        Text(
+                                            text = "📱 Restringido a Datos Móviles (Wi-Fi no permitido)",
+                                            color = NeonOrange,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    if (conf.blockMobileData) {
+                                        Text(
+                                            text = "📡 Restringido a Red Wi-Fi (Datos móviles no permitidos)",
+                                            color = NeonCyan,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    if (conf.blockSniffers) {
+                                        Text(
+                                            text = "🛡️ Protección Anti-Sniffer / Anti-Debug activa",
+                                            color = NeonGreen,
                                             fontSize = 11.sp
                                         )
                                     }

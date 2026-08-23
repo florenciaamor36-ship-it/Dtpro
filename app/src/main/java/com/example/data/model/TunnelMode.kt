@@ -7,19 +7,19 @@ enum class TunnelMode(
     val requiresSni: Boolean,
     val defaultPort: Int
 ) {
+    SSH_PAYLOAD(
+        title = "SSH + HTTP Custom Payload",
+        description = "Inyección de cabeceras HTTP mediante proxy / puerto 80",
+        requiresPayload = true,
+        requiresSni = false,
+        defaultPort = 80
+    ),
     SSH_DIRECT(
-        title = "SSH Direct",
+        title = "SSH Direct (TCP)",
         description = "Conexión SSH TCP directa al servidor",
         requiresPayload = false,
         requiresSni = false,
         defaultPort = 22
-    ),
-    SSH_PAYLOAD(
-        title = "SSH + HTTP Custom Payload",
-        description = "Inyección de cabeceras HTTP mediante proxy",
-        requiresPayload = true,
-        requiresSni = false,
-        defaultPort = 80
     ),
     SSH_SSL(
         title = "SSH + SSL / TLS (SNI)",
@@ -41,6 +41,20 @@ enum class TunnelMode(
         requiresPayload = true,
         requiresSni = true,
         defaultPort = 443
+    ),
+    V2RAY_VMESS(
+        title = "V2Ray (VMess / VLESS)",
+        description = "Túnel V2Ray VMess / VLESS con transporte WS y TLS",
+        requiresPayload = false,
+        requiresSni = true,
+        defaultPort = 443
+    ),
+    UDP_HYSTERIA(
+        title = "UDP Custom / Hysteria / BadVPN",
+        description = "Túnel UDP de baja latencia para juegos y llamadas",
+        requiresPayload = false,
+        requiresSni = false,
+        defaultPort = 7300
     ),
     DIRECT_PROXY(
         title = "Proxy SOCKS5 / HTTP Directo",

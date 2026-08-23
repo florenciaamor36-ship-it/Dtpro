@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
@@ -41,16 +43,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.TunnelConfig
+import com.example.service.TunnelEngine
 import com.example.ui.theme.CyberBorder
 import com.example.ui.theme.CyberCard
-import com.example.ui.theme.CyberCardLight
 import com.example.ui.theme.CyberNavy
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonGreen
+import com.example.ui.theme.NeonOrange
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.util.BatteryManagerHelper
+import com.example.util.SoundEffectHelper
 
 data class DnsPreset(val name: String, val primary: String, val secondary: String)
 
@@ -80,6 +84,8 @@ fun SettingsDialog(
 
     var isWakeLockOn by remember { mutableStateOf(BatteryManagerHelper.isWakeLockEnabled(context)) }
     var isBatterySaverOn by remember { mutableStateOf(BatteryManagerHelper.isBatterySaverEnabled(context)) }
+    var isSoundOn by remember { mutableStateOf(SoundEffectHelper.isSoundEnabled(context)) }
+    var isHotshareOn by remember { mutableStateOf(TunnelEngine.instance.isHotshareActive()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -97,7 +103,43 @@ fun SettingsDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Sección Batería y WakeLock (Paso 5)
+                // Sección Hotshare / Tethering (Compartir VPN a PC/WiFi)
+                Text("HOTSHARE / TETHERING (COMPARTIR VPN)", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(CyberCard, RoundedCornerShape(10.dp))
+                        .border(1.dp, CyberBorder, RoundedCornerShape(10.dp))
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.WifiTethering, contentDescription = null, tint = NeonOrange, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Compartir VPN vía Proxy (Puerto 8080)", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Permite a tu PC o celular en tu zona Wi-Fi usar la VPN de tu teléfono", color = TextMuted, fontSize = 10.sp)
+                        }
+                    }
+                    Switch(
+                        checked = isHotshareOn,
+                        onCheckedChange = {
+                            isHotshareOn = it
+                            TunnelEngine.instance.toggleHotshare(it, 8080)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = NeonOrange,
+                            checkedTrackColor = CyberNavy
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Sección Batería y WakeLock
                 Text("RENDIMIENTO Y ENERGÍA", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -155,6 +197,41 @@ fun SettingsDialog(
                         onCheckedChange = {
                             isBatterySaverOn = it
                             BatteryManagerHelper.setBatterySaverEnabled(context, it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = NeonCyan,
+                            checkedTrackColor = CyberNavy
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(CyberCard, RoundedCornerShape(10.dp))
+                        .border(1.dp, CyberBorder, RoundedCornerShape(10.dp))
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.VolumeUp, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Efectos de Sonido", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Emite tonos de aviso al conectar, desconectar o en error", color = TextMuted, fontSize = 10.sp)
+                        }
+                    }
+                    Switch(
+                        checked = isSoundOn,
+                        onCheckedChange = {
+                            isSoundOn = it
+                            SoundEffectHelper.setSoundEnabled(context, it)
+                            if (it) {
+                                SoundEffectHelper.playConnectSound(context)
+                            }
                         },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = NeonCyan,

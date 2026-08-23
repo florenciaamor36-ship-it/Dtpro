@@ -29,7 +29,7 @@ object ConfigExporter {
      */
     fun exportConfig(config: TunnelConfig): String {
         val rootJson = JSONObject().apply {
-            put("v", 2)
+            put("v", 3)
             put("name", config.name)
             put("mode", config.mode.name)
             put("serverHost", config.serverHost)
@@ -43,6 +43,16 @@ object ConfigExporter {
             put("dnsPrimary", config.dnsPrimary)
             put("dnsSecondary", config.dnsSecondary)
             put("autoReconnect", config.autoReconnect)
+
+            // Bloqueos Adicionales
+            put("blockRoot", config.blockRoot)
+            put("allowedCarriers", config.allowedCarriers)
+            put("blockWifi", config.blockWifi)
+            put("blockMobileData", config.blockMobileData)
+            put("blockSniffers", config.blockSniffers)
+            put("blockHotshare", config.blockHotshare)
+            put("lockPassword", config.lockPassword)
+            put("showToastOnConnect", config.showToastOnConnect)
 
             if (config.isLocked) {
                 // Encriptar credenciales y payload si el archivo está cerrado
@@ -109,6 +119,16 @@ object ConfigExporter {
             val dnsSecondary = rootJson.optString("dnsSecondary", "8.8.4.4")
             val autoReconnect = rootJson.optBoolean("autoReconnect", true)
 
+            // Bloqueos Adicionales
+            val blockRoot = rootJson.optBoolean("blockRoot", false)
+            val allowedCarriers = rootJson.optString("allowedCarriers", "")
+            val blockWifi = rootJson.optBoolean("blockWifi", false)
+            val blockMobileData = rootJson.optBoolean("blockMobileData", false)
+            val blockSniffers = rootJson.optBoolean("blockSniffers", false)
+            val blockHotshare = rootJson.optBoolean("blockHotshare", false)
+            val lockPassword = rootJson.optString("lockPassword", "")
+            val showToastOnConnect = rootJson.optString("showToastOnConnect", "")
+
             var username = ""
             var password = ""
             var customPayload = ""
@@ -158,12 +178,24 @@ object ConfigExporter {
                 expiryTimestamp = expiryTimestamp,
                 allowedHwids = allowedHwids,
                 vpsAuthUrl = vpsAuthUrl,
-                creatorNote = creatorNote
+                creatorNote = creatorNote,
+                blockRoot = blockRoot,
+                allowedCarriers = allowedCarriers,
+                blockWifi = blockWifi,
+                blockMobileData = blockMobileData,
+                blockSniffers = blockSniffers,
+                blockHotshare = blockHotshare,
+                lockPassword = lockPassword,
+                showToastOnConnect = showToastOnConnect
             )
 
             val statusDetails = buildString {
                 append("✓ Perfil '$name' importado correctamente.")
                 if (isLocked) append(" [🔒 Bloqueado]")
+                if (blockRoot) append(" [🚫 No Root]")
+                if (allowedCarriers.isNotBlank()) append(" [📶 $allowedCarriers]")
+                if (blockWifi) append(" [📱 Solo Datos]")
+                if (blockMobileData) append(" [📡 Solo Wi-Fi]")
                 if (expiryTimestamp > 0) {
                     val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
                     append(" Expira: ${sdf.format(Date(expiryTimestamp))}")

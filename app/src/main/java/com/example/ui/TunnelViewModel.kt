@@ -44,6 +44,7 @@ class TunnelViewModel(application: Application) : AndroidViewModel(application) 
 
     val showServersSheet = MutableStateFlow(false)
     val showPayloadGenerator = MutableStateFlow(false)
+    val showAppFilterDialog = MutableStateFlow(false)
     val showToolsDialog = MutableStateFlow(false)
     val showSettingsDialog = MutableStateFlow(false)
     val showImportExportDialog = MutableStateFlow(false)

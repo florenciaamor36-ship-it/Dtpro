@@ -1,5 +1,6 @@
 package com.example.service
 
+import android.content.Context
 import com.example.data.model.ConnectionStatus
 import com.example.data.model.LogLevel
 import com.example.data.model.LogEntry
@@ -7,7 +8,9 @@ import com.example.data.model.TunnelConfig
 import com.example.data.model.TunnelMode
 import com.example.data.model.TunnelState
 import com.example.util.BatteryManagerHelper
+import com.example.util.HapticFeedbackHelper
 import com.example.util.NetworkDiagnostics
+import com.example.util.SoundEffectHelper
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import kotlinx.coroutines.CoroutineScope
@@ -35,11 +38,15 @@ class TunnelEngine private constructor() {
     private var jschSession: Session? = null
     private var wsTransport: WebSocketTransport? = null
     private var localProxy: LocalProxyServer? = null
+    private var v2rayClient: V2RayClient? = null
+    private var udpGwClient: UdpGwClient? = null
+    private var hotshareServer: HotshareServer? = null
     private var statsJob: Job? = null
+    private var pingerJob: Job? = null
     private var reconnectAttempts = 0
     private var isUserInitiatedStop = false
 
-    private var lastContext: android.content.Context? = null
+    private var lastContext: Context? = null
 
     companion object {
         val instance: TunnelEngine by lazy { TunnelEngine() }
@@ -60,7 +67,7 @@ class TunnelEngine private constructor() {
         _logs.value = emptyList()
     }
 
-    fun startTunnel(context: android.content.Context? = null, config: TunnelConfig) {
+    fun startTunnel(context: Context? = null, config: TunnelConfig) {
         isUserInitiatedStop = false
         if (context != null) {
             lastContext = context.applicationContext
@@ -77,50 +84,45 @@ class TunnelEngine private constructor() {
                 // Validación básica de campos indispensables
                 val targetHost = config.serverHost.trim()
                 if (targetHost.isBlank() && config.proxyHost.isBlank()) {
-                    val err = "Error de configuración: Debes ingresar el Host del servidor SSH o el Host frontal."
+                    val err = "Error de configuración: Debes ingresar el Host del servidor o el Host frontal."
                     log("⛔ $err", LogLevel.ERROR)
                     _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Error(err))
                     return@launch
                 }
-                if (config.username.trim().isBlank()) {
+
+                if (config.mode != TunnelMode.V2RAY_VMESS && config.mode != TunnelMode.UDP_HYSTERIA && config.username.trim().isBlank()) {
                     val err = "Error de configuración: Debes ingresar el Usuario SSH."
                     log("⛔ $err", LogLevel.ERROR)
                     _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Error(err))
                     return@launch
                 }
 
-                // 1. Verificación de Expiración (Fecha y Hora)
-                val expiryCheck = com.example.util.HwidManager.checkExpiry(config)
-                if (!expiryCheck.first) {
-                    log("⛔ ERROR DE SEGURIDAD: ${expiryCheck.second}", LogLevel.ERROR)
-                    _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Error(expiryCheck.second))
-                    return@launch
-                } else if (config.expiryTimestamp > 0) {
-                    log("✓ Archivo de configuración válido (${expiryCheck.second})", LogLevel.SUCCESS)
-                }
-
-                // 2. Verificación de HWID Autorizado
+                // 1. Verificación Integral de Seguridad y Bloqueos de Archivo
                 if (context != null) {
                     val myHwid = com.example.util.HwidManager.getHwid(context)
                     log("HWID del Dispositivo: $myHwid", LogLevel.INFO)
 
-                    val hwidCheck = com.example.util.HwidManager.checkHwidPermission(context, config)
-                    if (!hwidCheck.first) {
-                        log("⛔ ACCESO DENEGADO: ${hwidCheck.second}", LogLevel.ERROR)
-                        _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Error(hwidCheck.second))
+                    val securityCheck = com.example.util.SecurityValidator.validateAll(context, config)
+                    if (!securityCheck.first) {
+                        log("⛔ SEGURIDAD / BLOQUEO: ${securityCheck.second}", LogLevel.ERROR)
+                        _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Error(securityCheck.second))
                         return@launch
                     }
-
-                    // 3. Verificación Remota en Servidor VPS (si está configurada)
-                    if (config.vpsAuthUrl.isNotBlank()) {
-                        log("Consultando autorización en VPS remota...", LogLevel.INFO)
-                        val vpsCheck = com.example.util.HwidManager.checkVpsValidation(context, config)
-                        if (!vpsCheck.first) {
-                            log("⛔ BLOQUEO VPS: ${vpsCheck.second}", LogLevel.ERROR)
-                            _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Error(vpsCheck.second))
-                            return@launch
-                        }
-                        log("✓ Autorización confirmada por VPS: ${vpsCheck.second}", LogLevel.SUCCESS)
+                    if (config.blockRoot) {
+                        log("✓ Dispositivo libre de Root (Verificado)", LogLevel.SUCCESS)
+                    }
+                    if (config.allowedCarriers.isNotBlank()) {
+                        log("✓ Bloqueo por operadora validado (${config.allowedCarriers})", LogLevel.SUCCESS)
+                    }
+                    if (config.expiryTimestamp > 0) {
+                        log("✓ Archivo de configuración vigente", LogLevel.SUCCESS)
+                    }
+                } else {
+                    val expiryCheck = com.example.util.HwidManager.checkExpiry(config)
+                    if (!expiryCheck.first) {
+                        log("⛔ ERROR DE SEGURIDAD: ${expiryCheck.second}", LogLevel.ERROR)
+                        _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Error(expiryCheck.second))
+                        return@launch
                     }
                 }
 
@@ -128,10 +130,19 @@ class TunnelEngine private constructor() {
                     log("Nota del Creador: ${config.creatorNote}", LogLevel.INFO)
                 }
 
-                if (config.mode == TunnelMode.SSH_WEBSOCKET || config.mode == TunnelMode.SSH_WEBSOCKET_SSL) {
-                    startWebSocketTunnel(config)
-                } else {
-                    startSshDirectOrSslOrPayload(config)
+                when (config.mode) {
+                    TunnelMode.SSH_WEBSOCKET, TunnelMode.SSH_WEBSOCKET_SSL -> {
+                        startWebSocketTunnel(config)
+                    }
+                    TunnelMode.V2RAY_VMESS -> {
+                        startV2RayTunnel(config)
+                    }
+                    TunnelMode.UDP_HYSTERIA -> {
+                        startUdpTunnel(config)
+                    }
+                    else -> {
+                        startSshDirectOrSslOrPayload(config)
+                    }
                 }
             } catch (e: Exception) {
                 val readableError = getReadableErrorMessage(e)
@@ -163,6 +174,83 @@ class TunnelEngine private constructor() {
                 msg
             }
             else -> "Error en conexión: ${msg.ifBlank { e.javaClass.simpleName }}"
+        }
+    }
+
+    private suspend fun startV2RayTunnel(config: TunnelConfig) {
+        withContext(Dispatchers.IO) {
+            log("Iniciando túnel V2Ray (VMess/VLESS sobre WS + TLS)...", LogLevel.INFO)
+            val client = V2RayClient(
+                scope = scope,
+                serverHost = config.serverHost,
+                serverPort = if (config.serverPort > 0) config.serverPort else 443,
+                uuid = config.password.ifBlank { config.username },
+                sniHost = config.sniHost.ifBlank { config.serverHost },
+                path = if (config.customPayload.isNotBlank() && config.customPayload.startsWith("/")) config.customPayload else "/vmess",
+                localSocksPort = 1080
+            ) { msg ->
+                log(msg, LogLevel.DEBUG)
+            }
+            v2rayClient = client
+            client.start()
+
+            // Iniciar reenvío UDP opcional si está activado
+            if (config.isUdpForwarding) {
+                startUdpGwIfNeeded(config)
+            }
+
+            // Iniciar Proxy local
+            startLocalProxy(1080)
+            reconnectAttempts = 0
+            _tunnelState.value = _tunnelState.value.copy(
+                status = ConnectionStatus.Connected,
+                connectedSinceTimestamp = System.currentTimeMillis()
+            )
+            log("✓ Conexión V2Ray establecida con éxito.", LogLevel.SUCCESS)
+            lastContext?.let { 
+                HapticFeedbackHelper.vibrateSuccess(it)
+                SoundEffectHelper.playConnectSound(it)
+            }
+            startStatsMonitoring()
+            startKeepAlivePinger()
+            refreshPublicIp()
+        }
+    }
+
+    private suspend fun startUdpTunnel(config: TunnelConfig) {
+        withContext(Dispatchers.IO) {
+            log("Iniciando túnel UDP / BadVPN / Hysteria...", LogLevel.INFO)
+            startUdpGwIfNeeded(config)
+            startLocalProxy(1080)
+            reconnectAttempts = 0
+            _tunnelState.value = _tunnelState.value.copy(
+                status = ConnectionStatus.Connected,
+                connectedSinceTimestamp = System.currentTimeMillis()
+            )
+            log("✓ Túnel UDP conectado con éxito.", LogLevel.SUCCESS)
+            lastContext?.let { 
+                HapticFeedbackHelper.vibrateSuccess(it)
+                SoundEffectHelper.playConnectSound(it)
+            }
+            startStatsMonitoring()
+            startKeepAlivePinger()
+            refreshPublicIp()
+        }
+    }
+
+    private fun startUdpGwIfNeeded(config: TunnelConfig) {
+        val targetHost = config.serverHost.ifBlank { config.proxyHost }
+        if (targetHost.isNotBlank()) {
+            val udpClient = UdpGwClient(
+                scope = scope,
+                remoteServer = targetHost,
+                remoteUdpPort = 7300,
+                localListenPort = 7300
+            ) { msg ->
+                log(msg, LogLevel.DEBUG)
+            }
+            udpGwClient = udpClient
+            udpClient.start()
         }
     }
 
@@ -248,122 +336,171 @@ class TunnelEngine private constructor() {
                         }
                     }
                 } catch (e: Exception) {
-                    log("Aviso en configuración de puertos: ${e.message}", LogLevel.WARNING)
+                    log("Aviso de Port Forwarding: ${e.message}", LogLevel.WARNING)
                 }
 
                 jschSession = session
-                reconnectAttempts = 0
 
-                // Iniciar Proxy local para conteo de estadísticas de tráfico
+                if (config.isUdpForwarding) {
+                    startUdpGwIfNeeded(config)
+                }
+
                 startLocalProxy(socksPort)
-
+                reconnectAttempts = 0
                 _tunnelState.value = _tunnelState.value.copy(
                     status = ConnectionStatus.Connected,
-                    connectedSinceTimestamp = System.currentTimeMillis(),
-                    localSocksPort = socksPort
+                    connectedSinceTimestamp = System.currentTimeMillis()
                 )
-                log("✓ ¡TÚNEL CONECTADO Y OPERATIVO AL 100%!", LogLevel.SUCCESS)
-
-                startMonitoringLoop(config)
+                log("✓ Conexión establecida con éxito. Enrutando tráfico a través del túnel.", LogLevel.SUCCESS)
+                lastContext?.let { ctx ->
+                    HapticFeedbackHelper.vibrateSuccess(ctx)
+                    SoundEffectHelper.playConnectSound(ctx)
+                    if (config.showToastOnConnect.isNotBlank()) {
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
+                            android.widget.Toast.makeText(ctx, config.showToastOnConnect, android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+                startStatsMonitoring()
+                startKeepAlivePinger()
+                refreshPublicIp()
 
             } catch (e: Exception) {
-                log("Error de conexión SSH: ${e.message}", LogLevel.ERROR)
-                handleConnectionFailure(config, e.message ?: "Fallo de conexión SSH")
+                val readableError = getReadableErrorMessage(e)
+                log("⛔ $readableError", LogLevel.ERROR)
+                handleConnectionFailure(config, readableError)
             }
         }
     }
 
     private fun startLocalProxy(remoteSocksPort: Int) {
         localProxy?.stop()
-        val proxy = LocalProxyServer(
+        localProxy = LocalProxyServer(
             scope = scope,
             localPort = 8080,
             remoteSocksPort = remoteSocksPort,
-            onBytesTransferred = { bytesIn, bytesOut ->
+            onBytesTransferred = { inBytes, outBytes ->
                 val current = _tunnelState.value
                 _tunnelState.value = current.copy(
-                    bytesIn = current.bytesIn + bytesIn,
-                    bytesOut = current.bytesOut + bytesOut
+                    bytesIn = current.bytesIn + inBytes,
+                    bytesOut = current.bytesOut + outBytes
                 )
             },
-            logCallback = { msg -> log(msg, LogLevel.DEBUG) }
+            logCallback = { msg ->
+                log(msg, LogLevel.DEBUG)
+            }
         )
-        proxy.start()
-        localProxy = proxy
+        localProxy?.start()
     }
 
-    private fun startMonitoringLoop(config: TunnelConfig) {
+    private fun startKeepAlivePinger() {
+        pingerJob?.cancel()
+        pingerJob = scope.launch {
+            while (isActive) {
+                delay(30000) // Pinger cada 30 segundos
+                if (_tunnelState.value.status is ConnectionStatus.Connected) {
+                    try {
+                        val pingMs = NetworkDiagnostics.checkRealPing("8.8.8.8", 53, 2000)
+                        if (pingMs > 0) {
+                            _tunnelState.value = _tunnelState.value.copy(pingMs = pingMs)
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+    }
+
+    private fun startStatsMonitoring() {
         statsJob?.cancel()
         statsJob = scope.launch {
-            var lastIn = _tunnelState.value.bytesIn
-            var lastOut = _tunnelState.value.bytesOut
+            var prevIn = 0L
+            var prevOut = 0L
+            while (isActive) {
+                delay(1000)
+                val curIn = _tunnelState.value.bytesIn
+                val curOut = _tunnelState.value.bytesOut
+                val downSpeed = (curIn - prevIn).coerceAtLeast(0)
+                val upSpeed = (curOut - prevOut).coerceAtLeast(0)
+                prevIn = curIn
+                prevOut = curOut
 
-            // Obtener IP pública real y geolocalización
-            scope.launch {
+                _tunnelState.value = _tunnelState.value.copy(
+                    downloadSpeedBps = downSpeed,
+                    uploadSpeedBps = upSpeed
+                )
+            }
+        }
+    }
+
+    private fun refreshPublicIp() {
+        scope.launch {
+            try {
                 val ipInfo = NetworkDiagnostics.fetchPublicIpInfo()
-                _tunnelState.value = _tunnelState.value.copy(
-                    publicIp = ipInfo.ip,
-                    ipLocation = ipInfo.region
-                )
-                log("IP Pública del Túnel: ${ipInfo.ip} (${ipInfo.region})", LogLevel.INFO)
-            }
-
-            while (isActive && jschSession?.isConnected == true) {
-                val isSaver = lastContext?.let { BatteryManagerHelper.isBatterySaverEnabled(it) } ?: false
-                val pollInterval = if (isSaver) 3000L else 1000L
-                delay(pollInterval)
-
-                val currentIn = _tunnelState.value.bytesIn
-                val currentOut = _tunnelState.value.bytesOut
-
-                val speedDown = ((currentIn - lastIn) * 1000L) / pollInterval
-                val speedUp = ((currentOut - lastOut) * 1000L) / pollInterval
-                lastIn = currentIn
-                lastOut = currentOut
-
-                // Ping periódico
-                val ping = if (!isSaver) NetworkDiagnostics.checkRealPing("1.1.1.1", 53, 2000) else _tunnelState.value.pingMs
-
-                _tunnelState.value = _tunnelState.value.copy(
-                    downloadSpeedBps = speedDown,
-                    uploadSpeedBps = speedUp,
-                    pingMs = ping
-                )
-            }
-
-            if (!isUserInitiatedStop && _tunnelState.value.status is ConnectionStatus.Connected) {
-                log("Conexión perdida con el servidor.", LogLevel.WARNING)
-                handleConnectionFailure(config, "Conexión SSH perdida.")
-            }
+                if (ipInfo.ip.isNotBlank() && ipInfo.ip != "---") {
+                    _tunnelState.value = _tunnelState.value.copy(
+                        publicIp = ipInfo.ip,
+                        ipLocation = ipInfo.region
+                    )
+                    log("IP Pública Asignada: ${ipInfo.ip} (${ipInfo.region})", LogLevel.INFO)
+                }
+            } catch (_: Exception) {}
         }
     }
 
     private suspend fun handleConnectionFailure(config: TunnelConfig, reason: String) {
         cleanup()
+        lastContext?.let { SoundEffectHelper.playErrorSound(it) }
         if (config.autoReconnect && !isUserInitiatedStop && reconnectAttempts < 5) {
             reconnectAttempts++
-            val delaySeconds = reconnectAttempts * 2
-            log("Reintentando conexión automática en $delaySeconds segundos (Intento $reconnectAttempts/5)...", LogLevel.WARNING)
+            val delaySec = reconnectAttempts * 3
+            log("Reintentando conexión automática en $delaySec s (Intento $reconnectAttempts/5)...", LogLevel.WARNING)
             _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Reconnecting)
-            delay(delaySeconds * 1000L)
-            if (!isUserInitiatedStop) {
-                startTunnel(lastContext, config)
-            }
+            delay(delaySec * 1000L)
+            startTunnel(lastContext, config)
         } else {
-            _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Error(reason))
+            _tunnelState.value = _tunnelState.value.copy(
+                status = ConnectionStatus.Error(reason)
+            )
         }
     }
 
     fun stopTunnel() {
         isUserInitiatedStop = true
-        log("Deteniendo túnel a petición del usuario...", LogLevel.INFO)
-        _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Disconnected)
+        reconnectAttempts = 0
+        log("Deteniendo túnel y liberando recursos...", LogLevel.INFO)
         cleanup()
-        lastContext?.let { BatteryManagerHelper.releaseWakeLock() }
+        _tunnelState.value = _tunnelState.value.copy(
+            status = ConnectionStatus.Disconnected,
+            downloadSpeedBps = 0L,
+            uploadSpeedBps = 0L
+        )
+        lastContext?.let { 
+            HapticFeedbackHelper.vibrateDisconnect(it)
+            SoundEffectHelper.playDisconnectSound(it)
+        }
         log("Túnel desconectado.", LogLevel.INFO)
     }
 
+    fun toggleHotshare(enable: Boolean, listenPort: Int = 8080) {
+        if (enable) {
+            hotshareServer?.stop()
+            val server = HotshareServer(scope, listenPort = listenPort, upstreamSocksPort = 1080) { msg ->
+                log(msg, LogLevel.INFO)
+            }
+            hotshareServer = server
+            server.start()
+        } else {
+            hotshareServer?.stop()
+            hotshareServer = null
+            log("Hotshare / Tethering detenido.", LogLevel.INFO)
+        }
+    }
+
+    fun isHotshareActive(): Boolean = hotshareServer?.isRunning?.get() ?: false
+
     private fun cleanup() {
+        pingerJob?.cancel()
+        pingerJob = null
         statsJob?.cancel()
         statsJob = null
         try {
@@ -376,7 +513,21 @@ class TunnelEngine private constructor() {
         } catch (_: Exception) {}
         wsTransport = null
 
-        localProxy?.stop()
+        try {
+            v2rayClient?.stop()
+        } catch (_: Exception) {}
+        v2rayClient = null
+
+        try {
+            udpGwClient?.stop()
+        } catch (_: Exception) {}
+        udpGwClient = null
+
+        try {
+            localProxy?.stop()
+        } catch (_: Exception) {}
         localProxy = null
+
+        BatteryManagerHelper.releaseWakeLock()
     }
 }

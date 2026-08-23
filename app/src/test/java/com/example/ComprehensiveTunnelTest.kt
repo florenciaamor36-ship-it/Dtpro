@@ -27,6 +27,8 @@ class ComprehensiveTunnelTest {
             TunnelMode.SSH_SSL,
             TunnelMode.SSH_WEBSOCKET,
             TunnelMode.SSH_WEBSOCKET_SSL,
+            TunnelMode.V2RAY_VMESS,
+            TunnelMode.UDP_HYSTERIA,
             TunnelMode.DIRECT_PROXY
         )
 
@@ -76,7 +78,8 @@ class ComprehensiveTunnelTest {
         val testPayloads = listOf(
             "GET / HTTP/1.1[crlf]Host: [host][crlf]Connection: Keep-Alive[crlf][crlf]",
             "CONNECT [host_port] HTTP/1.1[crlf]Host: [host][crlf]Connection: Keep-Alive[crlf][crlf]",
-            "GET / HTTP/1.1[crlf]Host: target.net[crlf]X-Online-Host: [host][crlf][crlf]"
+            "GET / HTTP/1.1[crlf]Host: target.net[crlf]X-Online-Host: [host][crlf][crlf]",
+            "GET http://[host]/ [protocol][crlf]Host: [host][crlf]User-Agent: [ua][crlf][crlf]"
         )
 
         for (p in testPayloads) {
@@ -126,5 +129,64 @@ class ComprehensiveTunnelTest {
         )
         val unauthCheck = HwidManager.checkHwidPermission(context, unauthConfig)
         assertFalse("Debe ser rechazado si mi HWID no está en la lista", unauthCheck.first)
+    }
+
+    @Test
+    fun testHotshareEngineToggle() {
+        val engine = TunnelEngine.instance
+        assertFalse(engine.isHotshareActive())
+        engine.toggleHotshare(true, 8089)
+        engine.toggleHotshare(false, 8089)
+        assertFalse(engine.isHotshareActive())
+    }
+
+    @Test
+    fun testSecurityValidatorAndLockingFeatures() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        // 1. Test Valid Config with No Blocks
+        val cleanConfig = TunnelConfig(
+            name = "Clean Config",
+            blockRoot = false,
+            blockSniffers = false
+        )
+        val validResult = com.example.util.SecurityValidator.validateAll(context, cleanConfig)
+        assertTrue("Configuración sin bloqueos debe ser válida", validResult.first)
+
+        // 2. Test Expired Config Validation
+        val expiredConfig = TunnelConfig(
+            name = "Expired Config",
+            expiryTimestamp = System.currentTimeMillis() - 60000L // Expired 1 min ago
+        )
+        val expiredResult = com.example.util.SecurityValidator.validateAll(context, expiredConfig)
+        assertFalse("Configuración expirada debe ser rechazada", expiredResult.first)
+        assertTrue("Mensaje debe mencionar expiró", expiredResult.second.contains("expir", ignoreCase = true))
+
+        // 3. Test Advanced Locks Export/Import Integrity
+        val fullLockedConfig = TunnelConfig(
+            name = "Super Protected Config",
+            isLocked = true,
+            blockRoot = true,
+            blockWifi = true,
+            blockMobileData = false,
+            blockSniffers = true,
+            blockHotshare = true,
+            allowedCarriers = "Claro,Movistar,Personal",
+            showToastOnConnect = "¡Bienvenido a la red VIP!"
+        )
+
+        val exportedStr = ConfigExporter.exportConfig(fullLockedConfig)
+        val importedResult = ConfigExporter.importConfigDetailed(exportedStr)
+        assertTrue(importedResult is ConfigExporter.ImportResult.Success)
+
+        val importedConf = (importedResult as ConfigExporter.ImportResult.Success).config
+        assertTrue(importedConf.isLocked)
+        assertTrue(importedConf.blockRoot)
+        assertTrue(importedConf.blockWifi)
+        assertFalse(importedConf.blockMobileData)
+        assertTrue(importedConf.blockSniffers)
+        assertTrue(importedConf.blockHotshare)
+        assertEquals("Claro,Movistar,Personal", importedConf.allowedCarriers)
+        assertEquals("¡Bienvenido a la red VIP!", importedConf.showToastOnConnect)
     }
 }

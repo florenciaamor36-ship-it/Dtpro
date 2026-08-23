@@ -11,7 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@Database(entities = [TunnelConfig::class], version = 2, exportSchema = false)
+@Database(entities = [TunnelConfig::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun tunnelConfigDao(): TunnelConfigDao
 
@@ -49,9 +49,9 @@ abstract class AppDatabase : RoomDatabase() {
 
         suspend fun populateInitialConfigs(dao: TunnelConfigDao) {
             if (dao.getCount() == 0) {
-                val preloaded = listOf(
+                val initialProfile = listOf(
                     TunnelConfig(
-                        name = "SSH + HTTP Payload (Puerto 80)",
+                        name = "Mi Configuración Manual",
                         mode = TunnelMode.SSH_PAYLOAD,
                         serverHost = "",
                         serverPort = 80,
@@ -61,39 +61,9 @@ abstract class AppDatabase : RoomDatabase() {
                         password = "",
                         customPayload = "GET / HTTP/1.1[crlf]Host: [host][crlf]Connection: Keep-Alive[crlf][crlf]",
                         isDefault = true
-                    ),
-                    TunnelConfig(
-                        name = "SSH Direct (TCP 22)",
-                        mode = TunnelMode.SSH_DIRECT,
-                        serverHost = "",
-                        serverPort = 22,
-                        username = "",
-                        password = "",
-                        isDefault = false
-                    ),
-                    TunnelConfig(
-                        name = "SSL / TLS Stunnel (SNI 443)",
-                        mode = TunnelMode.SSH_SSL,
-                        serverHost = "",
-                        serverPort = 443,
-                        username = "",
-                        password = "",
-                        sniHost = "",
-                        isDefault = false
-                    ),
-                    TunnelConfig(
-                        name = "WebSocket SSL",
-                        mode = TunnelMode.SSH_WEBSOCKET_SSL,
-                        serverHost = "",
-                        serverPort = 443,
-                        username = "",
-                        password = "",
-                        sniHost = "",
-                        customPayload = "GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]",
-                        isDefault = false
                     )
                 )
-                dao.insertAll(preloaded)
+                dao.insertAll(initialProfile)
             }
         }
     }

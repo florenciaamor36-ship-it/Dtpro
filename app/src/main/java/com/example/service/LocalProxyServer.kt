@@ -77,7 +77,7 @@ class LocalProxyServer(
     }
 
     private fun relayStream(input: InputStream, output: OutputStream, isUpload: Boolean) {
-        val buffer = ByteArray(16384)
+        val buffer = ByteArray(8192) // 8KB buffer óptimo para menor uso de RAM y alta velocidad
         try {
             while (true) {
                 val read = input.read(buffer)
