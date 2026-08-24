@@ -111,6 +111,9 @@ dependencies {
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   implementation(libs.jsch)
+  // SSH-first migration: Apache MINA SSHD is evaluated behind an adapter.
+  implementation(libs.sshd.core)
+  implementation(libs.sshd.common)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
   testImplementation(libs.androidx.compose.ui.test.junit4)
