@@ -6,7 +6,8 @@ import java.util.Locale
 /** Expands the payload syntax without changing literal bytes unnecessarily. */
 object PayloadCodec {
     fun expand(template: String, host: String, port: Int, userAgent: String): ByteArray =
-        expandBlocks(template, host, port, userAgent).flatten().toByteArray()
+        expandBlocks(template, host, port, userAgent)
+            .fold(ByteArray(0)) { result, block -> result + block }
 
     /** Returns exact transmission blocks; [split] never becomes a literal byte. */
     fun expandBlocks(template: String, host: String, port: Int, userAgent: String): List<ByteArray> {
