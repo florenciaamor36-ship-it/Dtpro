@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fix #21: No cleartext traffic permitted anywhere, including debug builds -->
+<network-security-config>
+    <!-- Base configuration: block all cleartext traffic -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <!-- Trust system CAs only -->
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Debug overrides: trust user-installed CAs for proxy tools, but NO cleartext -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

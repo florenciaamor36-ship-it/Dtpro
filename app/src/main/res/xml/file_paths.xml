@@ -1,6 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <cache-path name="shared_cache" path="." />
-    <files-path name="app_files" path="." />
-    <external-files-path name="external_files" path="." />
+<paths>
+    <!-- External files directory for config exports -->
+    <external-files-path
+        name="external_files"
+        path="." />
+    
+    <!-- Cache directory for temporary files -->
+    <cache-path
+        name="cache"
+        path="." />
+    
+    <!-- Files directory for shared configs -->
+    <files-path
+        name="files"
+        path="." />
+    
+    <!-- External cache for large config files -->
+    <external-cache-path
+        name="external_cache"
+        path="." />
 </paths>

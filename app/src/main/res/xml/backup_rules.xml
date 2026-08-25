@@ -1,13 +1,25 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
--->
+<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- Include shared preferences for app settings -->
+    <include
+        domain="sharedpref"
+        path="." />
+    
+    <!-- Include database for server lists and configs -->
+    <include
+        domain="database"
+        path="." />
+    
+    <!-- Exclude sensitive data from backup -->
+    <exclude
+        domain="sharedpref"
+        path="device_info.xml" />
+    <!-- AUDIT FIX: aerovpn_prefs.xml holds the persisted last-VPN-config JSON
+         (server credentials, private keys, passwords). Never back it up. -->
+    <exclude
+        domain="sharedpref"
+        path="aerovpn_prefs.xml" />
+    <!-- NOTE: no <include> covers the "file" domain, so files are never
+         backed up anyway — the old <exclude domain="file" path="backup_key"/>
+         was a no-op and failed lint (FullBackupContent). -->
 </full-backup-content>

@@ -1,0 +1,597 @@
+package com.aerovpn.ui.screens
+
+import android.content.Context
+import android.os.Build
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.aerovpn.ui.PermissionUiState
+
+data class SettingsItem(
+    val id: String,
+    val title: String,
+    val description: String,
+    val icon: ImageVector,
+    val type: SettingsItemType
+)
+
+enum class SettingsItemType {
+    NAVIGATION,
+    TOGGLE,
+    SELECT,
+    TEXT
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(
+    darkThemeEnabled: Boolean,
+    onDarkThemeToggle: (Boolean) -> Unit,
+    onBackClick: () -> Unit,
+    permissionUi: PermissionUiState = PermissionUiState(),
+    onRequestNotifications: () -> Unit = {},
+    onRequestBluetooth: () -> Unit = {},
+    onOpenAppSettings: () -> Unit = {},
+    onOpenNotificationSettings: () -> Unit = {}
+) {
+    var killSwitchEnabled by remember { mutableStateOf(false) }
+    var autoReconnectEnabled by remember { mutableStateOf(true) }
+    var showProtocolDialog by remember { mutableStateOf(false) }
+    var selectedProtocol by remember { mutableStateOf("Auto") }
+
+    // M2: persisted auto-connect-on-boot setting (same prefs file the
+    // BootReceiver reads: "aerovpn_prefs" / "auto_connect_on_boot").
+    val settingsContext = LocalContext.current
+    var autoConnectOnBoot by remember {
+        mutableStateOf(
+            settingsContext
+                .getSharedPreferences("aerovpn_prefs", Context.MODE_PRIVATE)
+                .getBoolean("auto_connect_on_boot", false)
+        )
+    }
+
+    if (showProtocolDialog) {
+        ProtocolSelectionDialog(
+            selectedProtocol = selectedProtocol,
+            onProtocolSelected = {
+                selectedProtocol = it
+                showProtocolDialog = false
+            },
+            onDismiss = { showProtocolDialog = false }
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // Top Bar
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shadowElevation = 4.dp,
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Text(
+                    text = "Settings",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            // General Settings Section
+            item {
+                SettingsSectionTitle("General")
+            }
+
+            item {
+                SettingsItem(
+                    title = "Protocol",
+                    description = selectedProtocol,
+                    icon = Icons.Default.Shield,
+                    onClick = { showProtocolDialog = true }
+                )
+            }
+
+            item {
+                SettingsToggleItem(
+                    title = "Kill Switch",
+                    description = "Block internet when VPN disconnects",
+                    icon = Icons.Default.Lock,
+                    checked = killSwitchEnabled,
+                    onCheckedChange = { killSwitchEnabled = it }
+                )
+            }
+
+            item {
+                SettingsToggleItem(
+                    title = "Auto Reconnect",
+                    description = "Automatically reconnect on connection loss",
+                    icon = Icons.Default.Refresh,
+                    checked = autoReconnectEnabled,
+                    onCheckedChange = { autoReconnectEnabled = it }
+                )
+            }
+
+            item {
+                SettingsToggleItem(
+                    title = "Auto Connect on Boot",
+                    description = "Reconnect to the last server when the device starts up",
+                    icon = Icons.Default.PhoneAndroid,
+                    checked = autoConnectOnBoot,
+                    onCheckedChange = {
+                        autoConnectOnBoot = it
+                        settingsContext
+                            .getSharedPreferences("aerovpn_prefs", Context.MODE_PRIVATE)
+                            .edit()
+                            .putBoolean("auto_connect_on_boot", it)
+                            .apply()
+                    }
+                )
+            }
+
+            // Appearance Section
+            item {
+                SettingsSectionTitle("Appearance")
+            }
+
+            item {
+                SettingsToggleItem(
+                    title = "Dark Theme",
+                    description = "Use dark theme for the app",
+                    icon = Icons.Default.Palette,
+                    checked = darkThemeEnabled,
+                    onCheckedChange = onDarkThemeToggle
+                )
+            }
+
+            // Permissions Section
+            item {
+                SettingsSectionTitle("Permissions")
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                item {
+                    PermissionStatusRow(
+                        title = "Notifications",
+                        description = "Shows VPN connection status in the notification bar",
+                        icon = Icons.Default.Notifications,
+                        granted = permissionUi.notificationsGranted,
+                        canAsk = permissionUi.notificationsCanAsk,
+                        onAllowClick = onRequestNotifications,
+                        onOpenSettingsClick = onOpenNotificationSettings
+                    )
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                item {
+                    PermissionStatusRow(
+                        title = "Nearby Devices",
+                        description = "Bluetooth access for connection sharing",
+                        icon = Icons.Default.Bluetooth,
+                        granted = permissionUi.bluetoothGranted,
+                        canAsk = permissionUi.bluetoothCanAsk,
+                        onAllowClick = onRequestBluetooth,
+                        onOpenSettingsClick = onOpenAppSettings
+                    )
+                }
+            }
+
+            // Privacy Section
+            item {
+                SettingsSectionTitle("Privacy & Security")
+            }
+
+            item {
+                SettingsItem(
+                    title = "DNS Settings",
+                    description = "Configure custom DNS servers",
+                    icon = Icons.Default.Dns,
+                    onClick = { }
+                )
+            }
+
+            item {
+                SettingsItem(
+                    title = "IP Leak Protection",
+                    description = "Prevent IP and DNS leaks",
+                    icon = Icons.Default.Shield,
+                    onClick = { }
+                )
+            }
+
+            item {
+                SettingsItem(
+                    title = "Split Tunneling",
+                    description = "Choose which apps use VPN",
+                    icon = Icons.Default.CallSplit,
+                    onClick = { }
+                )
+            }
+
+            // Advanced Section
+            item {
+                SettingsSectionTitle("Advanced")
+            }
+
+            item {
+                SettingsItem(
+                    title = "Connection Logs",
+                    description = "View connection history",
+                    icon = Icons.Default.Article,
+                    onClick = { }
+                )
+            }
+
+            item {
+                SettingsItem(
+                    title = "App Version",
+                    description = "v1.0.0 (Build 1)",
+                    icon = Icons.Default.Info,
+                    onClick = { }
+                )
+            }
+
+            // About Section
+            item {
+                SettingsSectionTitle("About")
+            }
+
+            item {
+                SettingsItem(
+                    title = "Privacy Policy",
+                    description = "Read our privacy policy",
+                    icon = Icons.Default.Policy,
+                    onClick = { }
+                )
+            }
+
+            item {
+                SettingsItem(
+                    title = "Terms of Service",
+                    description = "View terms and conditions",
+                    icon = Icons.Default.Gavel,
+                    onClick = { }
+                )
+            }
+
+            item {
+                SettingsItem(
+                    title = "Help & Support",
+                    description = "Get help and contact support",
+                    icon = Icons.Default.Help,
+                    onClick = { }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsSectionTitle(title: String) {
+    Text(
+        text = title,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+    )
+}
+
+@Composable
+fun SettingsItem(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = description,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = "Navigate",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
+    }
+}
+
+@Composable
+fun SettingsToggleItem(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = description,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary
+                )
+            )
+        }
+    }
+}
+
+/**
+ * A settings row that shows the live status of one runtime permission and lets
+ * the user request it ("Allow"), or jump to system settings when the dialog can
+ * no longer be shown ("Settings").
+ */
+@Composable
+fun PermissionStatusRow(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    granted: Boolean,
+    canAsk: Boolean,
+    onAllowClick: () -> Unit,
+    onOpenSettingsClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = description,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = when {
+                        granted -> "Allowed"
+                        canAsk -> "Not granted"
+                        else -> "Permanently denied"
+                    },
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = when {
+                        granted -> Color(0xFF4CAF50)
+                        canAsk -> Color(0xFFFF9800)
+                        else -> MaterialTheme.colorScheme.error
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            when {
+                granted -> {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Allowed",
+                        tint = Color(0xFF4CAF50),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                canAsk -> {
+                    TextButton(onClick = onAllowClick) {
+                        Text("Allow")
+                    }
+                }
+                else -> {
+                    TextButton(onClick = onOpenSettingsClick) {
+                        Text("Settings")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProtocolSelectionDialog(
+    selectedProtocol: String,
+    onProtocolSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Protocol") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val protocols = listOf(
+                    "Auto" to "Automatically select best protocol",
+                    "WireGuard" to "Fast and modern VPN protocol",
+                    "V2Ray" to "Advanced proxy protocol (VMess/VLess)",
+                    "SSH" to "Secure Shell tunneling",
+                    "Shadowsocks" to "Lightweight proxy protocol"
+                )
+
+                protocols.forEach { (protocol, description) ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onProtocolSelected(protocol) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (selectedProtocol == protocol) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedProtocol == protocol,
+                                onClick = { onProtocolSelected(protocol) }
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = protocol,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = description,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}

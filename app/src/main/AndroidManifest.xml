@@ -2,24 +2,189 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- ==================================================================
+         PERMISSIONS
+         ================================================================== -->
+
+    <!-- Core network access -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- WifiManager status + hotspot reflection used by ShareConnectionTool -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- USB tethering (ConnectivityManager.setUsbTethering) in ShareConnectionTool -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+
+    <!-- VPN Service binding - REQUIRED for any VPN app -->
+    <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
+
+    <!-- Foreground service for persistent VPN connection -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Fix (Android 14 / targetSdk 34): starting a foreground service with type
+         connectedDevice requires this matching permission, otherwise startForeground()
+         throws SecurityException and the VPN service crashes on launch. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Notifications for Android 13+ (runtime permission, requested in MainActivity) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Boot completion for auto-start VPN -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Query installed packages for the App Filter split-tunneling tool
+         (AppsFilterTool uses PackageManager.getInstalledApplications) -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- Bluetooth for connection sharing (ShareConnectionTool).
+         Runtime permissions on Android 12+ (API 31), requested in MainActivity with
+         rationale/settings fallback UX. BLUETOOTH_SCAN carries neverForLocation so it
+         does not also require ACCESS_FINE_LOCATION on Android 12+.
+         The legacy BLUETOOTH/BLUETOOTH_ADMIN permissions were removed - no code uses
+         the pre-31 Bluetooth APIs. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+
+    <!-- ==================================================================
+         FEATURE DECLARATIONS
+         ================================================================== -->
+    
+    <!-- Network features - not required but nice to have -->
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    
+    <!-- Touchscreen and leanback support -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    
+    <!-- Camera not required but declare for completeness -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
+        android:name=".AeroVPNApplication"
         android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:backupAgent=".AeroVPNBackupAgent"
         android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MyApplication">
+        android:theme="@style/Theme.AeroVPN"
+        android:description="@string/app_description"
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config"
+        tools:targetApi="34">
 
+        <!-- ==================================================================
+             MAIN ACTIVITY
+             ================================================================== -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.AeroVPN"
+            android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:screenOrientation="unspecified">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            
+            <!-- Deep link support for vpn:// URIs -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="aerovpn" />
+            </intent-filter>
+            
+            <!-- Config file import support -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- ==================================================================
+             VPN SERVICE - CORE COMPONENT
+             ================================================================== -->
+        <service
+            android:name=".service.AeroVpnService"
+            android:enabled="true"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="connectedDevice"
+            android:process=":vpn"
+            tools:targetApi="29">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+
+        <!-- ==================================================================
+             BROADCAST RECEIVERS
+             ================================================================== -->
+        
+        <!-- Boot Receiver - Auto-start VPN on device boot.
+             NOT directBootAware: the app's settings live in credential-encrypted
+             storage, which is unavailable before the user unlocks the device.
+             The old LOCKED_BOOT_COMPLETED handling crashed with
+             IllegalStateException on every pre-unlock boot (API 24+), so only
+             the post-unlock BOOT_COMPLETED / QUICKBOOT_POWERON are handled. -->
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Network State Receiver - PROGRAMMATICALLY registered in AeroVpnService.
+             CONNECTIVITY_CHANGE is deprecated since API 28 and not reliably delivered
+             to manifest-declared receivers on API 24+. The receiver also handles
+             SCREEN_ON/OFF which can ONLY be received by programmatic receivers.
+             Do NOT re-add a manifest entry for this receiver. -->
+
+        <!-- Package Update Receiver - Handle app updates -->
+        <receiver
+            android:name=".receiver.PackageUpdateReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Power state events (POWER_CONNECTED/DISCONNECTED, SCREEN_ON/OFF)
+             are handled by NetworkStateReceiver, which is registered
+             programmatically inside AeroVpnService. SCREEN_ON/SCREEN_OFF can
+             only ever be delivered to runtime-registered receivers, so the
+             previous manifest-registered, exported PowerStateReceiver was dead
+             code and has been removed. -->
+
+        <!-- ==================================================================
+             NOTIFICATION CHANNELS
+             Defined in AeroVPNApplication.kt at runtime
+             ================================================================== -->
+        <!-- Channel IDs (defined in code):
+             - vpn_connection: VPN connection status notifications
+             - vpn_service: Foreground service notification
+             - general: General app notifications
+        -->
+
+        <!-- ==================================================================
+             FILE PROVIDER - For config sharing
+             ================================================================== -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -30,51 +195,45 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:label="@string/app_name"
-            android:theme="@style/Theme.MyApplication"
-            android:windowSoftInputMode="adjustResize">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <!-- Intent Filter para abrir perfiles .dtun y .ehi desde WhatsApp, Telegram o Gestores de Archivos -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="file" />
-                <data android:scheme="content" />
-                <data android:mimeType="*/*" />
-                <data android:pathPattern=".*\\.dtun" />
-                <data android:pathPattern=".*\\.ehi" />
-                <data android:host="*" />
-            </intent-filter>
-
-            <!-- Intent Filter para enlaces universales dtunnel:// -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="dtunnel" />
-            </intent-filter>
-        </activity>
-
-        <service
-            android:name=".service.DTunnelVpnService"
+        <!-- ==================================================================
+             INIT PROVIDER - Application startup
+             ================================================================== -->
+        <!-- AeroVPNApplication implements androidx.work.Configuration.Provider
+             (on-demand init), so the default WorkManagerInitializer MUST be
+             removed here — lint check RemoveWorkManagerInitializer fails the
+             release build otherwise. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
             android:exported="false"
-            android:permission="android.permission.BIND_VPN_SERVICE"
-            android:foregroundServiceType="specialUse">
-            <intent-filter>
-                <action android:name="android.net.VpnService" />
-            </intent-filter>
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="VPN and SSH custom payload tunnel proxy service" />
-        </service>
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
+        <!-- ==================================================================
+             WORK MANAGER - Background tasks
+             ================================================================== -->
+        <!-- WorkManager is initialized on-demand via AeroVPNApplication's
+             Configuration.Provider (workManagerConfiguration). -->
+
     </application>
+
+    <!-- ==================================================================
+         INSTALLATION CONFIGURATION
+         ================================================================== -->
+    <queries>
+        <!-- Allow querying for VPN apps -->
+        <intent>
+            <action android:name="android.net.VpnService" />
+        </intent>
+        <!-- Allow querying for browsers -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
 
 </manifest>

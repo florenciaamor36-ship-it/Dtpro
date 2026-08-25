@@ -1,19 +1,55 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Fix #13: Corrected data-extraction-rules.xml
+    - Added disableIfNoEncryptionCapabilities="true" for cloud-backup to prevent
+      backup on unencrypted transport (security best practice for VPN apps)
+    - Excluded credential and key files from both cloud-backup and device-transfer
+    - Follows Android 12+ data extraction rules format (API 31+)
 -->
 <data-extraction-rules>
-    <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <!-- Include app preferences -->
+        <include
+            domain="sharedpref"
+            path="." />
+
+        <!-- Include database -->
+        <include
+            domain="database"
+            path="." />
+
+        <!-- Exclude sensitive data: device info, credentials, VPN keys -->
+        <exclude
+            domain="sharedpref"
+            path="device_info.xml" />
+        <exclude
+            domain="sharedpref"
+            path="vpn_credentials.xml" />
+        <!-- AUDIT FIX: aerovpn_prefs holds the persisted last-VPN-config JSON
+             (server credentials, private keys, passwords). Never back it up. -->
+        <exclude
+            domain="sharedpref"
+            path="aerovpn_prefs.xml" />
+        <!-- Domains without an <include> (file, external) are never backed
+             up, so excluding them is a no-op that fails lint. -->
     </cloud-backup>
-    <!--
+
+    <!-- Device transfer rules -->
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <include
+            domain="sharedpref"
+            path="." />
+        <include
+            domain="database"
+            path="." />
+        <!-- Exclude credentials from device transfer as well -->
+        <exclude
+            domain="sharedpref"
+            path="vpn_credentials.xml" />
+        <!-- AUDIT FIX: never transfer the persisted VPN credentials prefs. -->
+        <exclude
+            domain="sharedpref"
+            path="aerovpn_prefs.xml" />
+        <!-- Same here: "file" domain has no <include>, so nothing to exclude. -->
     </device-transfer>
-    -->
 </data-extraction-rules>
