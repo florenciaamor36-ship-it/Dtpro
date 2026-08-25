@@ -68,12 +68,24 @@ jobs:
       - name: Test upstream
         working-directory: .native/tun2socks
         run: go test ./...
+      - name: Add Android-exportable wrapper
+        working-directory: .native/tun2socks
+        run: |
+          mkdir -p mobile
+          cat > mobile/bridge.go <<'EOF'
+          package mobile
+          import "github.com/xjasonlyu/tun2socks/v2/engine"
+          // Start configures and starts tun2socks on an Android ParcelFileDescriptor.
+          func Start(fd int, proxy string) { k := new(engine.Key); k.SetDevice("fd://" + fmt.Sprint(fd)); k.SetProxy(proxy); k.SetMTU(1500); k.SetLogLevel("info"); engine.Insert(k); engine.Start() }
+          func Stop() { engine.Stop() }
+          EOF
+          sed -i 's/import "github.com\/xjasonlyu\/tun2socks\/v2\/engine"/import ("fmt"; "github.com\/xjasonlyu\/tun2socks\/v2\/engine")/' mobile/bridge.go
       - name: Build Android Go binding
         working-directory: .native/tun2socks
         run: |
           mkdir -p "$GITHUB_WORKSPACE/native-artifacts"
           gomobile bind -target=android -androidapi=24 -javapkg=com.example.tun2socks \
-            -o "$GITHUB_WORKSPACE/native-artifacts/tun2socks.aar" ./engine
+            -o "$GITHUB_WORKSPACE/native-artifacts/tun2socks.aar" ./mobile
       - name: Upload native AAR and license
         uses: actions/upload-artifact@v4
         with:
