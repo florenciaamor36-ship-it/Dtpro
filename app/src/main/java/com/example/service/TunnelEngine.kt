@@ -36,6 +36,7 @@ class TunnelEngine private constructor() {
     val logs: StateFlow<List<LogEntry>> = _logs.asStateFlow()
 
     private var jschSession: Session? = null
+    private var minaSshEngine: MinaSshEngine? = null
     private var wsTransport: WebSocketTransport? = null
     private var localProxy: LocalProxyServer? = null
     private var v2rayClient: V2RayClient? = null
@@ -291,10 +292,34 @@ class TunnelEngine private constructor() {
     }
 
     private suspend fun startSshDirectOrSslOrPayload(config: TunnelConfig) {
+        if (config.mode == TunnelMode.SSH_DIRECT) {
+            startMinaDirect(config)
+            return
+        }
         val socketFactory = CustomSshSocketFactory(config, scope) { msg ->
             log(msg, LogLevel.DEBUG)
         }
         connectJSchSession(config, socketFactory)
+    }
+
+    private suspend fun startMinaDirect(config: TunnelConfig) {
+        withContext(Dispatchers.IO) {
+            log("Conectando SSH directo con Apache MINA...", LogLevel.INFO)
+            _tunnelState.value = _tunnelState.value.copy(status = ConnectionStatus.Authenticating)
+            val engine = MinaSshEngine { message -> log(message, LogLevel.DEBUG) }
+            minaSshEngine = engine
+            engine.connect(config.serverHost.trim(), config.serverPort, config.username.trim(), config.password)
+            engine.startDynamicForwarding(1080)
+            startLocalProxy(1080)
+            reconnectAttempts = 0
+            _tunnelState.value = _tunnelState.value.copy(
+                status = ConnectionStatus.Connected,
+                connectedSinceTimestamp = System.currentTimeMillis()
+            )
+            log("✓ SSH MINA autenticado y forwarding SOCKS activo en 127.0.0.1:1080", LogLevel.SUCCESS)
+            startStatsMonitoring()
+            startKeepAlivePinger()
+        }
     }
 
     private suspend fun connectJSchSession(config: TunnelConfig, socketFactory: CustomSshSocketFactory) {
@@ -507,6 +532,10 @@ class TunnelEngine private constructor() {
             jschSession?.disconnect()
         } catch (_: Exception) {}
         jschSession = null
+        try {
+            minaSshEngine?.close()
+        } catch (_: Exception) {}
+        minaSshEngine = null
 
         try {
             wsTransport?.close()

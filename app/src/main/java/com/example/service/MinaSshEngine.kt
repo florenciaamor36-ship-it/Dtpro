@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.apache.sshd.client.SshClient
 import org.apache.sshd.client.session.ClientSession
+import org.apache.sshd.common.util.net.SshdSocketAddress
 import java.io.Closeable
 
 /**
@@ -47,6 +48,13 @@ class MinaSshEngine(
     fun isConnected(): Boolean = session?.isOpen == true && session?.isAuthenticated == true
 
     fun currentSession(): ClientSession? = session
+
+    fun startDynamicForwarding(localPort: Int): SshdSocketAddress {
+        val activeSession = session ?: error("SSH session is not connected")
+        return activeSession.startDynamicPortForwarding(
+            SshdSocketAddress("127.0.0.1", localPort)
+        )
+    }
 
     override fun close() {
         try { session?.close(false) } catch (_: Throwable) {}
