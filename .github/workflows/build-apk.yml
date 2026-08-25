@@ -7,10 +7,20 @@ on:
 
 jobs:
   build:
+    needs: native-tun2socks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Download tun2socks AAR
+        uses: actions/download-artifact@v4
+        with:
+          name: tun2socks-android-aar-d24a734
+          path: native-download
+      - name: Install tun2socks AAR
+        run: |
+          mkdir -p app/libs
+          cp native-download/tun2socks.aar app/libs/tun2socks.aar
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
