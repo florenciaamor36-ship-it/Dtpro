@@ -63,7 +63,7 @@ jobs:
       - name: Get Version Name
         id: version
         run: |
-          VERSION=$(grep -oP "versionName '\K[^']+" app/build.gradle)
+          VERSION=$(sed -nE "s/.*versionName [\'\"]([^\'\"]+)[\'\"].*/\1/p" app/build.gradle | head -1)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       # NOTE: with splits.abi enabled the outputs are app-<abi>-*.apk and
