@@ -1,0 +1,5 @@
+Build diagnostic for 6062bf970a7639c490e06e557c5c40715f101f77
+FAILURE: Build failed with an exception.
+* What went wrong:
+> Could not resolve all files for configuration ':app:debugRuntimeClasspath'.
+Caused by: org.gradle.api.internal.artifacts.ivyservice.DefaultLenientConfiguration$ArtifactResolveException: Could not resolve all files for configuration ':app:debugRuntimeClasspath'.
