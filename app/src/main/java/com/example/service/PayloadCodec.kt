@@ -5,26 +5,38 @@ import java.util.Locale
 
 /** Expands the payload syntax without changing literal bytes unnecessarily. */
 object PayloadCodec {
-    fun expand(template: String, host: String, port: Int, userAgent: String): ByteArray {
-        val protocol = if (port == 443) "HTTPS" else "HTTP/1.1"
+    fun expand(template: String, host: String, port: Int, userAgent: String): ByteArray =
+        expandBlocks(template, host, port, userAgent).flatten().toByteArray()
+
+    /** Returns exact transmission blocks; [split] never becomes a literal byte. */
+    fun expandBlocks(template: String, host: String, port: Int, userAgent: String): List<ByteArray> {
+        val protocol = if (port == 443) "HTTP/1.0" else "HTTP/1.0"
         val replacements = mapOf(
             "[host]" to host,
+            "[ssh]" to "$host:$port",
             "[host_port]" to "$host:$port",
             "[port]" to port.toString(),
-            "[method]" to "GET",
+            "[method]" to "CONNECT",
             "[protocol]" to protocol,
-            "[ua]" to userAgent
+            "[ua]" to userAgent,
+            "[raw]" to "CONNECT $host:$port HTTP/1.0\\r\\n\\r\\n",
+            "[real_raw]" to "CONNECT $host:$port HTTP/1.0\\r\\n\\r\\n",
+            "[netData]" to "CONNECT $host:$port HTTP/1.0",
+            "[realData]" to "CONNECT $host:$port HTTP/1.0",
+            "[auth]" to ""
         )
-        var value = template
-            .replace("[crlf]", "\r\n", ignoreCase = true)
-            .replace("[lf]", "\n", ignoreCase = true)
-            .replace("[cr]", "\r", ignoreCase = true)
-        replacements.forEach { (key, replacement) ->
-            value = value.replace(key, replacement, ignoreCase = true)
-        }
-        // [split] is a transmission boundary, not part of the request bytes.
-        value = value.replace("[split]", "", ignoreCase = true)
-        return value.toByteArray(Charset.forName("ISO-8859-1"))
+        return template.split(Regex("\\[split(?:_(?:delay|instant))?\\]", RegexOption.IGNORE_CASE)).map { raw ->
+            var value = raw
+                .replace("[crlf*2]", "\\r\\n\\r\\n", ignoreCase = true)
+                .replace("[crlf]", "\\r\\n", ignoreCase = true)
+                .replace("[lfcr]", "\\n\\r", ignoreCase = true)
+                .replace("[lf]", "\\n", ignoreCase = true)
+                .replace("[cr]", "\\r", ignoreCase = true)
+                .replace("\\\\r", "\\r")
+                .replace("\\\\n", "\\n")
+            replacements.forEach { (key, replacement) -> value = value.replace(key, replacement, ignoreCase = true) }
+            value.toByteArray(Charset.forName("ISO-8859-1"))
+        }.filter { it.isNotEmpty() }
     }
 
     fun parseStatus(response: ByteArray): HttpStatus {

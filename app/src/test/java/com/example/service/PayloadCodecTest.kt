@@ -15,6 +15,13 @@ class PayloadCodecTest {
         )
     }
 
+    @Test fun preservesSplitAsSeparateBlocks() {
+        val blocks = PayloadCodec.expandBlocks("A[split]B", "host", 22, "ua")
+        assertEquals(2, blocks.size)
+        assertEquals("A", blocks[0].toString(Charsets.ISO_8859_1))
+        assertEquals("B", blocks[1].toString(Charsets.ISO_8859_1))
+    }
+
     @Test fun acceptsOnlyHttp101AsUpgrade() {
         assertEquals(HttpStatus.Upgrade(101), PayloadCodec.parseStatus("HTTP/1.1 101 Switching Protocols\r\n\r\n".toByteArray()))
         assertEquals(HttpStatus.Rejected(403), PayloadCodec.parseStatus("HTTP/1.1 403 Forbidden\r\n\r\n".toByteArray()))
