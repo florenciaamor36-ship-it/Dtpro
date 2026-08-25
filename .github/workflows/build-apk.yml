@@ -7,20 +7,10 @@ on:
 
 jobs:
   build:
-    needs: native-tun2socks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Download tun2socks AAR
-        uses: actions/download-artifact@v4
-        with:
-          name: tun2socks-android-aar-d24a734
-          path: native-download
-      - name: Install tun2socks AAR
-        run: |
-          mkdir -p app/libs
-          cp native-download/tun2socks.aar app/libs/tun2socks.aar
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -39,63 +29,4 @@ jobs:
         with:
           name: dtpro-debug-apk
           path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-  native-tun2socks:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Dtpro
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.26.3'
-          cache: false
-      - name: Set up Java for gomobile
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install NDK
-        run: sdkmanager "ndk;27.2.12479018"
-      - name: Install gomobile
-        run: |
-          go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20260821190718-4776eadac327
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-          gomobile init
-      - name: Checkout MIT tun2socks
-        run: |
-          git clone https://github.com/xjasonlyu/tun2socks.git .native/tun2socks
-          cd .native/tun2socks
-          git checkout d24a734
-          test -f LICENSE
-      - name: Test upstream
-        working-directory: .native/tun2socks
-        run: go test ./...
-      - name: Add Android-exportable wrapper
-        working-directory: .native/tun2socks
-        run: |
-          mkdir -p mobile
-          cat > mobile/bridge.go <<'EOF'
-          package mobile
-          import "github.com/xjasonlyu/tun2socks/v2/engine"
-          // Start configures and starts tun2socks on an Android ParcelFileDescriptor.
-          func Start(fd int, proxy string) { k := new(engine.Key); k.Device = "fd://" + fmt.Sprint(fd); k.Proxy = proxy; k.MTU = 1500; k.LogLevel = "info"; engine.Insert(k); engine.Start() }
-          func Stop() { engine.Stop() }
-          EOF
-          sed -i 's/import "github.com\/xjasonlyu\/tun2socks\/v2\/engine"/import ("fmt"; "github.com\/xjasonlyu\/tun2socks\/v2\/engine")/' mobile/bridge.go
-      - name: Build Android Go binding
-        working-directory: .native/tun2socks
-        run: |
-          mkdir -p "$GITHUB_WORKSPACE/native-artifacts"
-          gomobile bind -target=android -androidapi=24 -javapkg=com.example.tun2socks \
-            -o "$GITHUB_WORKSPACE/native-artifacts/tun2socks.aar" ./mobile
-      - name: Upload native AAR and license
-        uses: actions/upload-artifact@v4
-        with:
-          name: tun2socks-android-aar-d24a734
-          path: |
-            native-artifacts/tun2socks.aar
-            .native/tun2socks/LICENSE
           if-no-files-found: error
