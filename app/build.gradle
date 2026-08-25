@@ -147,7 +147,6 @@ dependencies {
     // com.wireguard.android.backend.WireGuardGo JNI entry points that
     // WireGuardProtocol drives via reflection (wgTurnOn/wgTurnOff/
     // wgGetSocketV4/wgGetSocketV6).
-    implementation 'com.wireguard.android:tunnel:1.0.20230706'
 
     // NOTE: Xray-core and tun2socks are bundled as executable "lib*.so" files
     // under src/main/jniLibs/<abi>/ (see V2RayProtocol). They run as child
