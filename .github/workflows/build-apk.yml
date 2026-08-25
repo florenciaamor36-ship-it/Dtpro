@@ -8,6 +8,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,6 +42,18 @@ jobs:
           name: aero-gradle-diagnostic
           path: gradle-debug.log
           if-no-files-found: warn
+      - name: Persist concise Gradle error in branch
+        if: failure()
+        run: |
+          {
+            echo "Build diagnostic for ${GITHUB_SHA}"
+            grep -E "FAILURE:|What went wrong|^\* What|^e: |error:|Could not" gradle-debug.log | tail -120 || true
+          } > gradle-error.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add gradle-error.txt
+          git diff --cached --quiet || git commit -m "ci: persist Gradle build diagnostic"
+          git push origin HEAD:${GITHUB_REF_NAME}
 
       - name: Build Release APK (unsigned, R8-optimized)
         run: ./gradlew assembleRelease --no-daemon
