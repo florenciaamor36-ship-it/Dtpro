@@ -29,7 +29,16 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK (installable, debug-signed)
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-debug.log
+      - name: Upload Gradle diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aero-gradle-diagnostic
+          path: gradle-debug.log
+          if-no-files-found: warn
 
       - name: Build Release APK (unsigned, R8-optimized)
         run: ./gradlew assembleRelease --no-daemon
