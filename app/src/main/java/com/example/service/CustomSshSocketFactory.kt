@@ -2,7 +2,6 @@ package com.example.service
 
 import com.example.data.model.TunnelConfig
 import com.example.data.model.TunnelMode
-import com.example.util.PayloadGenerator
 import com.jcraft.jsch.SocketFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -141,21 +140,16 @@ class CustomSshSocketFactory(
 
                 // Enviar payload con soporte de inyección partida [split] y retardos [delay_split]
                 if (config.customPayload.isNotBlank()) {
-                    val payloadChunks = PayloadGenerator.splitPayload(config.customPayload, targetHost, targetPort)
+                    val payloadBlocks = PayloadCodec.expandBlocks(
+                        config.customPayload, targetHost, targetPort, "Dtpro/1.0"
+                    )
                     val output = socket.getOutputStream()
-                    
-                    if (payloadChunks.size > 1) {
-                        logCallback("Iniciando Inyección Partida (Payload Split en ${payloadChunks.size} partes)...")
+                    if (payloadBlocks.size > 1) {
+                        logCallback("Iniciando inyección partida (${payloadBlocks.size} bloques)...")
                     }
-
-                    for ((chunkIndex, chunkPair) in payloadChunks.withIndex()) {
-                        val (chunkText, delayMs) = chunkPair
-                        if (delayMs > 0) {
-                            logCallback("Aplicando retardo de inyección ($delayMs ms)...")
-                            Thread.sleep(delayMs)
-                        }
-                        logCallback("Enviando fragmento ${chunkIndex + 1}/${payloadChunks.size} (${chunkText.length} bytes)...")
-                        output.write(chunkText.toByteArray(Charsets.ISO_8859_1))
+                    for ((index, block) in payloadBlocks.withIndex()) {
+                        logCallback("Enviando bloque ${index + 1}/${payloadBlocks.size} (${block.size} bytes)...")
+                        output.write(block)
                         output.flush()
                     }
                     logCallback("✓ Payload completado y enviado al Host Frontal. Esperando respuesta...")
