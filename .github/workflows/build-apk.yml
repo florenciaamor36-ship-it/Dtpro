@@ -44,6 +44,11 @@ jobs:
         uses: android-actions/setup-android@v3
       - name: Install NDK
         run: sdkmanager "ndk;27.2.12479018"
+      - name: Install gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20260821190718-4776eadac327
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          gomobile init
       - name: Checkout MIT tun2socks
         run: |
           git clone https://github.com/xjasonlyu/tun2socks.git .native/tun2socks
@@ -53,21 +58,17 @@ jobs:
       - name: Test upstream
         working-directory: .native/tun2socks
         run: go test ./...
-      - name: Build Android arm64 artifact
+      - name: Build Android Go binding
         working-directory: .native/tun2socks
-        env:
-          CGO_ENABLED: '0'
-          GOOS: android
-          GOARCH: arm64
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/native-artifacts/arm64-v8a"
-          go build -trimpath -buildvcs=false -ldflags='-s -w' \
-            -o "$GITHUB_WORKSPACE/native-artifacts/arm64-v8a/tun2socks" .
-      - name: Upload native artifact
+          mkdir -p "$GITHUB_WORKSPACE/native-artifacts"
+          gomobile bind -target=android -androidapi=24 -javapkg=com.example.tun2socks \
+            -o "$GITHUB_WORKSPACE/native-artifacts/tun2socks.aar" ./engine
+      - name: Upload native AAR and license
         uses: actions/upload-artifact@v4
         with:
-          name: tun2socks-android-arm64-d24a734
+          name: tun2socks-android-aar-d24a734
           path: |
-            native-artifacts/
+            native-artifacts/tun2socks.aar
             .native/tun2socks/LICENSE
           if-no-files-found: error
