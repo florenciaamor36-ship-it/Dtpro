@@ -18,12 +18,10 @@ jobs:
           java-version: '17'
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-      - name: Install Gradle
+      - name: Build debug APK with project wrapper
         run: |
-          curl -fsSL -o gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
-          unzip -q gradle.zip
-      - name: Build debug APK
-        run: gradle-9.3.1/bin/gradle assembleDebug --no-daemon
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
