@@ -14,6 +14,7 @@ import com.example.MainActivity
 import com.example.R
 import com.example.data.model.ConnectionStatus
 import com.example.data.model.TunnelConfig
+import com.example.util.AppFilterManager
 import com.example.util.BatteryManagerHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +26,6 @@ import kotlinx.coroutines.launch
 class DTunnelVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
-    private val tun2SocksBridge = Tun2SocksBridge()
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
     private var stateObserverJob: Job? = null
@@ -64,7 +64,15 @@ class DTunnelVpnService : VpnService() {
         when (intent?.action) {
             ACTION_CONNECT -> {
                 BatteryManagerHelper.acquireWakeLock(this)
-                startForeground(NOTIFICATION_ID, buildNotification("Iniciando conexión...", "DTunnel"))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        buildNotification("Iniciando conexión...", "DTunnel"),
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, buildNotification("Iniciando conexión...", "DTunnel"))
+                }
                 observeTunnelState()
                 establishVpn()
             }
@@ -92,14 +100,30 @@ class DTunnelVpnService : VpnService() {
                 builder.addDnsServer(dns2)
             } catch (_: Exception) {}
 
-            vpnInterface = builder.establish()
-            val tun = vpnInterface ?: error("No se pudo establecer TUN")
-            if (!tun2SocksBridge.start(tun, TunnelEngine.instance.tunnelState.value.currentConfig?.localSocksPort ?: 1080)) {
-                tun.close()
-                vpnInterface = null
-                error("No se pudo iniciar el puente TUN a SOCKS")
+            // Aplicar Split Tunneling / Filtro de Aplicaciones
+            if (AppFilterManager.isFilterEnabled(this)) {
+                val selectedApps = AppFilterManager.getSelectedApps(this)
+                val mode = AppFilterManager.getFilterMode(this)
+
+                if (selectedApps.isNotEmpty()) {
+                    for (pkg in selectedApps) {
+                        try {
+                            if (mode == "INCLUDE") {
+                                builder.addAllowedApplication(pkg)
+                            } else {
+                                builder.addDisallowedApplication(pkg)
+                            }
+                        } catch (e: Exception) {
+                            TunnelEngine.instance.log("Aviso en filtro de app ($pkg): ${e.message}", com.example.data.model.LogLevel.WARNING)
+                        }
+                    }
+                    val actionName = if (mode == "INCLUDE") "Enrutando exclusivamente" else "Excluyendo del túnel"
+                    TunnelEngine.instance.log("✓ Split Tunneling activo: $actionName ${selectedApps.size} apps.", com.example.data.model.LogLevel.INFO)
+                }
             }
-            TunnelEngine.instance.log("Puente TUN → SOCKS iniciado", com.example.data.model.LogLevel.SUCCESS)
+
+            vpnInterface = builder.establish()
+            TunnelEngine.instance.log("Interfaz TUN VPN establecida (10.0.0.2/24)", com.example.data.model.LogLevel.SUCCESS)
         } catch (e: Exception) {
             TunnelEngine.instance.log("Aviso en interfaz VPN: ${e.message}", com.example.data.model.LogLevel.WARNING)
         }
@@ -142,7 +166,6 @@ class DTunnelVpnService : VpnService() {
     private fun stopVpn() {
         BatteryManagerHelper.releaseWakeLock()
         TunnelEngine.instance.stopTunnel()
-        tun2SocksBridge.stop()
         try {
             vpnInterface?.close()
         } catch (_: Exception) {}
@@ -198,7 +221,6 @@ class DTunnelVpnService : VpnService() {
         BatteryManagerHelper.releaseWakeLock()
         stateObserverJob?.cancel()
         serviceJob.cancel()
-        tun2SocksBridge.stop()
         try {
             vpnInterface?.close()
         } catch (_: Exception) {}
