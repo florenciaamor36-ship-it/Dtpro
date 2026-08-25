@@ -76,7 +76,7 @@ jobs:
           package mobile
           import "github.com/xjasonlyu/tun2socks/v2/engine"
           // Start configures and starts tun2socks on an Android ParcelFileDescriptor.
-          func Start(fd int, proxy string) { k := new(engine.Key); k.SetDevice("fd://" + fmt.Sprint(fd)); k.SetProxy(proxy); k.SetMTU(1500); k.SetLogLevel("info"); engine.Insert(k); engine.Start() }
+          func Start(fd int, proxy string) { k := new(engine.Key); k.Device = "fd://" + fmt.Sprint(fd); k.Proxy = proxy; k.MTU = 1500; k.LogLevel = "info"; engine.Insert(k); engine.Start() }
           func Stop() { engine.Stop() }
           EOF
           sed -i 's/import "github.com\/xjasonlyu\/tun2socks\/v2\/engine"/import ("fmt"; "github.com\/xjasonlyu\/tun2socks\/v2\/engine")/' mobile/bridge.go
